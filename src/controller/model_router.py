@@ -5,7 +5,7 @@ from enum import Enum
 from dataclasses import dataclass
 import time
 
-from src.models.openrouter_client import ModelType, Message, OpenRouterClient
+from src.models.provider_router import ModelType, Message, OpenRouterClient
 from src.utils.config import config
 
 
@@ -177,7 +177,7 @@ async def route_and_execute(
     stream: bool = False,
 ) -> Tuple[RoutingDecision, str]:
     """Route task and execute in one call."""
-    from src.models.openrouter_client import create_messages
+    from src.models.provider_router import create_messages
     
     # Route the task
     decision = await router.route_task(user_input, context)

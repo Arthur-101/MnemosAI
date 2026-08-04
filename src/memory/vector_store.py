@@ -6,29 +6,56 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+class PyTorchEmbeddingFunction:
+    """Custom ChromaDB embedding function using PyTorch sentence-transformers locally with GPU acceleration."""
+    def __init__(self):
+        try:
+            import torch
+            from sentence_transformers import SentenceTransformer
+            
+            # Detect device (ROCm/CUDA GPU or CPU fallback)
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"Using local PyTorch vector embedding device: {self.device}")
+            
+            # Load model locally
+            self.model = SentenceTransformer("all-MiniLM-L6-v2", device=self.device)
+        except Exception as e:
+            logger.warning(f"Failed to load sentence-transformers on GPU/PyTorch: {e}. Falling back to default CPU embeddings.")
+            self.model = None
+
+    def __call__(self, input: List[str]) -> List[List[float]]:
+        if self.model:
+            embeddings = self.model.encode(input, convert_to_numpy=True)
+            return embeddings.tolist()
+        else:
+            # Fallback if model not loaded
+            return [[0.0] * 384 for _ in input]
+
+
 class VectorMemoryStore:
     def __init__(self, persist_directory: str = "data/chroma"):
         """Initialize ChromaDB client and collections."""
         os.makedirs(persist_directory, exist_ok=True)
         
         self.client = chromadb.PersistentClient(path=persist_directory)
+        self.embedding_fn = PyTorchEmbeddingFunction()
         
         # Create or get collections
-        # We use default embedding function (all-MiniLM-L6-v2) under the hood
-        # if no specific embedding function is provided. It automatically downloads
-        # sentence-transformers model.
         try:
             self.chat_collection = self.client.get_or_create_collection(
                 name="chat_history",
-                metadata={"hnsw:space": "cosine"}
+                metadata={"hnsw:space": "cosine"},
+                embedding_function=self.embedding_fn
             )
             self.user_memories_collection = self.client.get_or_create_collection(
                 name="user_memories",
-                metadata={"hnsw:space": "cosine"}
+                metadata={"hnsw:space": "cosine"},
+                embedding_function=self.embedding_fn
             )
             self.document_collection = self.client.get_or_create_collection(
                 name="documents",
-                metadata={"hnsw:space": "cosine"}
+                metadata={"hnsw:space": "cosine"},
+                embedding_function=self.embedding_fn
             )
         except Exception as e:
             logger.error(f"Failed to initialize Chroma collections: {e}")

@@ -80,18 +80,12 @@ class EmbeddedBackend:
                 return self._handle_get_role_models()
             elif method == "update_role_model":
                 return self._handle_update_role_model(params)
-            elif method == "get_api_keys":
-                return self._handle_get_api_keys()
-            elif method == "add_api_key":
-                return self._handle_add_api_key(params)
-            elif method == "delete_api_key":
-                return self._handle_delete_api_key(params)
-            elif method == "test_api_key":
-                return await self._handle_test_api_key(params)
-            elif method == "get_model_tracker_data":
-                return await self._handle_get_model_tracker_data()
-            elif method == "save_model_note":
-                return self._handle_save_model_note(params)
+            elif method == "get_amd_cloud_config":
+                return self._handle_get_amd_cloud_config()
+            elif method == "update_amd_cloud_config":
+                return self._handle_update_amd_cloud_config(params)
+            elif method == "get_amd_gpu_metrics":
+                return self._handle_get_amd_gpu_metrics()
             elif method == "get_mcp_servers":
                 return self._handle_get_mcp_servers()
             elif method == "add_mcp_server":
@@ -330,11 +324,11 @@ class EmbeddedBackend:
         """Fetch active provider & model assignment for all roles."""
         db_roles = self.memory.get_role_assignments()
         defaults = {
-            "orchestrator": {"provider": "openrouter", "model_id": "qwen/qwen3.5-flash-02-23"},
-            "coding": {"provider": "openrouter", "model_id": "deepseek/deepseek-v4-flash"},
-            "reasoning": {"provider": "openrouter", "model_id": "deepseek/deepseek-v4-pro"},
-            "multimodal": {"provider": "openrouter", "model_id": "google/gemini-2.5-flash-lite"},
-            "synthesizer": {"provider": "openrouter", "model_id": "google/gemini-2.5-flash-lite"}
+            "orchestrator": {"provider": "amd-cloud", "model_id": "amd-cloud/llama-3-8b-instruct"},
+            "coding": {"provider": "amd-cloud", "model_id": "amd-cloud/qwen-2.5-7b-instruct"},
+            "reasoning": {"provider": "amd-cloud", "model_id": "amd-cloud/llama-3-8b-instruct"},
+            "summarizer": {"provider": "amd-cloud", "model_id": "amd-cloud/qwen-2.5-7b-instruct"},
+            "synthesizer": {"provider": "amd-cloud", "model_id": "amd-cloud/llama-3-8b-instruct"}
         }
         from src.memory.redis_store import redis_store
         for role in defaults:
@@ -359,7 +353,7 @@ class EmbeddedBackend:
     def _handle_update_role_model(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Update model assignment for a role and update Redis + SQLite."""
         role = params.get("role", "").lower().strip()
-        provider = params.get("provider", "openrouter").lower().strip()
+        provider = params.get("provider", "amd-cloud").lower().strip()
         model_id = (params.get("model_id") or params.get("modelId") or "").strip()
         if not role or not model_id:
             return {
@@ -368,6 +362,7 @@ class EmbeddedBackend:
                 "id": params.get("request_id")
             }
         success = self.memory.save_role_assignment(role, provider, model_id)
+        
         from src.memory.redis_store import redis_store
         if redis_store.is_connected():
             redis_store.set_role_model(role, f"{provider}:{model_id}")
@@ -379,154 +374,57 @@ class EmbeddedBackend:
             "id": params.get("request_id")
         }
 
-    def _handle_get_api_keys(self) -> Dict[str, Any]:
-        """Get list of registered provider API keys."""
-        keys = self.memory.get_api_keys()
-        # Obfuscate values for privacy
-        safe_keys = []
-        for k in keys:
-            val = k.get("key_value", "")
-            masked = f"{val[:6]}...{val[-4:]}" if len(val) > 10 else "••••••••"
-            safe_keys.append({
-                "id": k.get("id"),
-                "provider": k.get("provider"),
-                "label": k.get("label"),
-                "masked_value": masked,
-                "is_active": k.get("is_active"),
-                "added_at": k.get("added_at")
-            })
+    def _handle_get_amd_cloud_config(self) -> Dict[str, Any]:
+        """Get AMD Radeon Cloud configuration."""
         return {
             "jsonrpc": "2.0",
-            "result": {"api_keys": safe_keys},
+            "result": {
+                "endpoint_url": config.settings.amd_cloud_url,
+                "api_key": config.settings.amd_cloud_key
+            },
             "id": None
         }
 
-    def _handle_add_api_key(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Add or update an API key for a provider."""
-        provider = params.get("provider", "").strip().lower()
-        key_value = (params.get("key_value") or params.get("keyValue") or "").strip()
-        label = params.get("label")
-        if not provider or not key_value:
-            return {
-                "jsonrpc": "2.0",
-                "error": {"code": -32602, "message": "Provider and key_value are required"},
-                "id": params.get("request_id")
-            }
-        key_id = self.memory.save_api_key(provider, key_value, label)
-        print(f"INFO: Saved API Key for provider [{provider}]", file=sys.stderr, flush=True)
+    def _handle_update_amd_cloud_config(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Update AMD Radeon Cloud configuration."""
+        url = params.get("endpoint_url", "").strip()
+        key = params.get("api_key", "").strip()
+        config.settings.amd_cloud_url = url
+        config.settings.amd_cloud_key = key
+        
+        # Optionally write back to .env
+        try:
+            env_path = os.path.join(os.getcwd(), ".env")
+            if os.path.exists(env_path):
+                with open(env_path, "r") as f:
+                    lines = f.readlines()
+                new_lines = []
+                for line in lines:
+                    if line.startswith("AMD_CLOUD_URL="):
+                        new_lines.append(f"AMD_CLOUD_URL={url}\n")
+                    elif line.startswith("AMD_CLOUD_KEY="):
+                        new_lines.append(f"AMD_CLOUD_KEY={key}\n")
+                    else:
+                        new_lines.append(line)
+                with open(env_path, "w") as f:
+                    f.writelines(new_lines)
+        except Exception as e:
+            print(f"WARNING: Failed to update .env: {e}", file=sys.stderr)
+
         return {
             "jsonrpc": "2.0",
-            "result": {"success": True, "key_id": key_id, "provider": provider},
+            "result": {"success": True},
             "id": params.get("request_id")
         }
 
-    def _handle_delete_api_key(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Delete an API key for a provider."""
-        provider = params.get("provider", "").strip().lower()
-        success = self.memory.delete_api_key(provider)
-        print(f"INFO: Deleted API Key for provider [{provider}]", file=sys.stderr, flush=True)
+    def _handle_get_amd_gpu_metrics(self) -> Dict[str, Any]:
+        """Fetch live AMD / RTX hardware metrics."""
+        from src.utils.hardware_telemetry import get_gpu_metrics
+        metrics = get_gpu_metrics()
         return {
             "jsonrpc": "2.0",
-            "result": {"success": success, "provider": provider},
-            "id": params.get("request_id")
-        }
-
-    async def _handle_test_api_key(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Test API key for a provider."""
-        provider = (params.get("provider") or "").strip().lower()
-        key_value = (params.get("key_value") or params.get("keyValue") or "").strip()
-        model_id = params.get("model_id") or params.get("modelId")
-        
-        # If no key_value provided, look up from DB or env
-        if not key_value:
-            from src.models.provider_router import ProviderRouter
-            pr = ProviderRouter(memory_store=self.memory)
-            key_value = (pr.get_api_key_for_provider(provider) or "").strip()
-            
-        if not provider or not key_value:
-            return {
-                "jsonrpc": "2.0",
-                "result": {"success": False, "error": f"No API Key found for provider [{provider}]. Please enter a key or set environment variable."},
-                "id": params.get("request_id")
-            }
-            
-        from src.models.provider_router import ProviderRouter
-        router = ProviderRouter(self.router.client, self.memory)
-        res = await router.test_provider_key(provider, key_value, model_id)
-        return {
-            "jsonrpc": "2.0",
-            "result": res,
-            "id": params.get("request_id")
-        }
-
-    async def _handle_get_model_tracker_data(self) -> Dict[str, Any]:
-        """Fetch combined catalog, usage stats, and notes for Model Tracker & Favorites."""
-        from src.models.provider_router import ProviderRouter
-        pr = ProviderRouter(memory_store=self.memory)
-        
-        providers = ["openrouter", "google", "openai", "anthropic", "groq", "mistral"]
-        all_models = []
-        
-        for prov in providers:
-            try:
-                cat = await pr.fetch_provider_models(prov)
-                for m in cat:
-                    m["provider"] = prov
-                    all_models.append(m)
-            except Exception:
-                pass
-                
-        user_notes = self.memory.get_model_notes()
-        usage_stats = self.memory.get_model_usage_stats()
-        
-        tracker_items = []
-        seen_ids = set()
-        
-        for m in all_models:
-            mid = m["id"]
-            if mid in seen_ids:
-                continue
-            seen_ids.add(mid)
-            
-            note_info = user_notes.get(mid, {})
-            u_info = usage_stats.get(mid, {})
-            
-            tracker_items.append({
-                "model_id": mid,
-                "name": m.get("name", mid),
-                "provider": m.get("provider", "openrouter"),
-                "cost_label": m.get("cost_label", "Standard"),
-                "is_active": m.get("is_active", True),
-                "is_favorite": note_info.get("is_favorite", False),
-                "notes": note_info.get("notes", ""),
-                "call_count": u_info.get("call_count", 0),
-                "last_used": u_info.get("last_used", None)
-            })
-            
-        tracker_items.sort(key=lambda x: (not x["is_favorite"], -x["call_count"]))
-
-        return {
-            "jsonrpc": "2.0",
-            "result": {"models": tracker_items},
+            "result": metrics,
             "id": None
-        }
-
-    def _handle_save_model_note(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Save user note and favorite status for a model."""
-        model_id = (params.get("model_id") or params.get("modelId") or "").strip()
-        provider = params.get("provider", "openrouter").strip()
-        fav_val = params.get("is_favorite") if "is_favorite" in params else params.get("isFavorite", 0)
-        is_favorite = 1 if fav_val else 0
-        notes = params.get("notes", "").strip()
-        
-        if not model_id:
-            return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "model_id is required"}}
-            
-        success = self.memory.save_model_note(model_id, provider, is_favorite, notes)
-        return {
-            "jsonrpc": "2.0",
-            "result": {"success": success, "model_id": model_id, "is_favorite": bool(is_favorite), "notes": notes},
-            "id": params.get("request_id")
         }
 
     def _handle_get_mcp_servers(self) -> Dict[str, Any]:

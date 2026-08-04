@@ -3,14 +3,89 @@ import json
 import logging
 import asyncio
 import random
+import re
 import urllib.request
 import urllib.error
 from typing import Dict, Any, List, Optional, Union
+from enum import Enum
 from pydantic import BaseModel, Field
 from src.memory.sqlite_store import SQLiteMemoryStore
 from src.utils.config import config
 
 logger = logging.getLogger(__name__)
+
+class ModelType(Enum):
+    QWEN = "qwen"
+    GEMINI_FLASH = "gemini_flash"
+    MIMO = "mimo"
+    DEEPSEEK = "deepseek"
+    GEMINI_PRO = "gemini_pro"
+    CLAUDE = "claude"
+
+class OpenRouterClient:
+    """Compatibility wrapper that acts like the deleted OpenRouterClient using local ProviderRouter under the hood."""
+    def __init__(self):
+        self.provider_router = ProviderRouter()
+        self.model_ids = {
+            ModelType.QWEN: "amd-cloud/qwen-2.5-7b-instruct",
+            ModelType.GEMINI_FLASH: "amd-cloud/qwen-2.5-7b-instruct",
+            ModelType.MIMO: "amd-cloud/llama-3-8b-instruct",
+            ModelType.DEEPSEEK: "amd-cloud/qwen-2.5-7b-instruct",
+            ModelType.GEMINI_PRO: "amd-cloud/llama-3-8b-instruct",
+            ModelType.CLAUDE: "amd-cloud/llama-3-8b-instruct"
+        }
+
+    async def generate_completion(self, messages, model_type, **kwargs):
+        model_id = self.model_ids.get(model_type, "amd-cloud/llama-3-8b-instruct")
+        dict_msgs = []
+        for m in messages:
+            if isinstance(m, dict):
+                dict_msgs.append(m)
+            else:
+                dict_msgs.append({"role": m.role, "content": extract_text_content(m.content)})
+        
+        res = await self.provider_router.generate(
+            messages=dict_msgs,
+            model_id=model_id,
+            temperature=kwargs.get("temperature", 0.7),
+            max_tokens=kwargs.get("max_tokens", 2000)
+        )
+        return res.get("content", "")
+
+    def get_available_models(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "id": "amd-cloud/llama-3-8b-instruct",
+                "name": "Llama 3 8B Instruct (AMD Radeon Cloud)",
+                "type": "reasoning",
+                "cost_label": "Local (ROCm Accelerated)",
+                "is_active": True,
+                "capabilities": {"max_tokens": 8192, "supports_tools": True, "supports_vision": False, "speed": 62.4, "cost_per_token": 0.0}
+            },
+            {
+                "id": "amd-cloud/qwen-2.5-7b-instruct",
+                "name": "Qwen 2.5 Coder 7B (AMD Radeon Cloud)",
+                "type": "coding",
+                "cost_label": "Local (ROCm Accelerated)",
+                "is_active": True,
+                "capabilities": {"max_tokens": 8192, "supports_tools": True, "supports_vision": False, "speed": 74.8, "cost_per_token": 0.0}
+            }
+        ]
+
+    async def close(self):
+        pass
+
+def create_messages(turns: List[Any]) -> List[Any]:
+    """Helper to convert turns or list of dicts to Message objects."""
+    msgs = []
+    for t in turns:
+        if isinstance(t, dict):
+            msgs.append(Message(role=t.get("role", "user"), content=t.get("content", "")))
+        elif hasattr(t, "role") and hasattr(t, "content"):
+            msgs.append(Message(role=t.role, content=t.content))
+        else:
+            msgs.append(Message(role="user", content=str(t)))
+    return msgs
 
 def extract_text_content(content: Any) -> str:
     """Extract string content safely from str, list, or dict."""
@@ -202,3 +277,74 @@ class ProviderRouter:
             {"id": "amd-cloud/qwen-2.5-7b-instruct", "name": "Qwen 2.5 Coder 7B (AMD Cloud)", "provider": "amd-cloud", "cost_label": "Free / Self-Hosted", "is_active": True},
             {"id": "amd-cloud/mistral-7b-instruct", "name": "Mistral 7B (AMD Cloud)", "provider": "amd-cloud", "cost_label": "Free / Self-Hosted", "is_active": True}
         ]
+
+    # ── Compatibility methods mapping to OpenRouterClient API ──────────────────
+
+    async def chat_completion(self, messages: List[Any], model_type: str, temperature: float = 0.7, max_tokens: int = 2000) -> Any:
+        """Mimics OpenRouterClient chat_completion method for compatibility."""
+        raw_msgs = [{"role": getattr(m, 'role', 'user'), "content": getattr(m, 'content', '')} for m in messages]
+        res = await self.generate(raw_msgs, model_type, temperature, max_tokens)
+        
+        class ChoicesMock:
+            def __init__(self, content):
+                self.message = {"content": content}
+            def get(self, key, default=None):
+                if key == "message":
+                    return self.message
+                return default
+
+        class UsageMock:
+            def __init__(self, tokens):
+                self.total_tokens = tokens
+
+        class ChatResponseMock:
+            def __init__(self, content, tokens):
+                self.choices = [ChoicesMock(content)]
+                self.usage = UsageMock(tokens)
+
+        return ChatResponseMock(res.get("content", ""), res.get("tokens_used", 0))
+
+    async def summarize_content(self, content_str: str, model_id: Optional[str] = None) -> str:
+        """Mimics OpenRouterClient summarize_content method."""
+        prompt = f"Summarize the following conversation content in under 400 tokens:\n\n{content_str}"
+        res = await self.generate([{"role": "user", "content": prompt}], model_id or "amd-cloud/qwen-2.5-7b-instruct")
+        return res.get("content", "")
+
+    async def extract_memory_facts(self, user_message: str, model_id: Optional[str] = None) -> List[str]:
+        """Mimics OpenRouterClient extract_memory_facts method."""
+        prompt = (
+            "Extract any permanent personal facts, preferences, or technical specifications from this user message "
+            "as a JSON list of strings. If none, return [].\n\n"
+            f"Message: {user_message}"
+        )
+        res = await self.generate([{"role": "user", "content": prompt}], model_id or "amd-cloud/llama-3-8b-instruct")
+        try:
+            content = res.get("content", "")
+            match = re.search(r'\[.*\]', content, re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+        except Exception:
+            pass
+        return []
+
+    async def consolidate_memory_actions(self, existing_memories: List[Dict[str, Any]], new_facts: List[str], model_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Mimics OpenRouterClient consolidate_memory_actions method."""
+        actions = []
+        for fact in new_facts:
+            actions.append({"action": "ADD", "fact": fact})
+        return actions
+
+    async def extract_tags(self, text: str, model_id: Optional[str] = None, use_heuristic: bool = True) -> List[str]:
+        """Heuristic tag extraction (fully offline/local)."""
+        words = re.findall(r'\b[a-zA-Z]{3,15}\b', text.lower())
+        stopwords = {"the", "and", "you", "for", "with", "this", "that", "from", "how", "what", "are", "can", "will"}
+        keywords = [w for w in words if w not in stopwords]
+        seen = set()
+        unique_keys = []
+        for kw in keywords:
+            if kw not in seen:
+                seen.add(kw)
+                unique_keys.append(kw)
+                if len(unique_keys) >= 5:
+                    break
+        return unique_keys

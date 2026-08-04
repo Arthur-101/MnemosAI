@@ -26,7 +26,7 @@ class ConsensusAggregator:
             if "synthesizer" in db_roles:
                 item = db_roles["synthesizer"]
                 if isinstance(item, dict):
-                    p = item.get("provider", "openrouter")
+                    p = item.get("provider", "amd-cloud")
                     m = item.get("model_id", "")
                     if m:
                         return f"{p}:{m}"
@@ -34,7 +34,7 @@ class ConsensusAggregator:
                     return item.strip()
         except Exception:
             pass
-        return "openrouter:google/gemini-2.5-flash-lite"
+        return "amd-cloud:amd-cloud/llama-3-8b-instruct"
         
     async def synthesize_response(
         self,

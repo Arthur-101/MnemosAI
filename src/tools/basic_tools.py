@@ -381,13 +381,13 @@ class BasicTools:
                     if role_key in db_roles:
                         item = db_roles[role_key]
                         if isinstance(item, dict):
-                            assigned_model = f"{item.get('provider', 'openrouter')}:{item.get('model_id', '')}"
+                            assigned_model = f"{item.get('provider', 'amd-cloud')}:{item.get('model_id', '')}"
                         elif isinstance(item, str):
                             assigned_model = item
                 except Exception:
                     pass
 
-            target_model = assigned_model.strip() if assigned_model and assigned_model.strip() else "openrouter:qwen/qwen3.5-flash-02-23"
+            target_model = assigned_model.strip() if assigned_model and assigned_model.strip() else "amd-cloud:amd-cloud/qwen-2.5-7b-instruct"
 
             # Prepare context from files if provided
             content_list: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
@@ -462,7 +462,7 @@ class BasicTools:
                         ))
                     except Exception as e:
                         # Fallback
-                        resolved_model = "openrouter:qwen/qwen3.5-flash-02-23"
+                        resolved_model = "amd-cloud:amd-cloud/qwen-2.5-7b-instruct"
                         res_item = asyncio.run(pr.generate(
                             messages=loop_messages,
                             model_id=resolved_model,

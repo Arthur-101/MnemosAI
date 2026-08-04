@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.models.openrouter_client import OpenRouterClient, Message, ModelType
+from src.models.provider_router import Message
 from src.memory.sqlite_store import SQLiteMemoryStore, SessionManager
 from src.memory.vector_store import VectorMemoryStore
 from src.memory.redis_store import redis_store
@@ -41,10 +41,10 @@ class ChatRouter:
         self.current_session_id = self.session_manager.current_session_id
     
     def initialize_client(self):
-        """Initialize OpenRouter client and ProviderRouter."""
+        """Initialize local/AMD Cloud ProviderRouter."""
         from src.models.provider_router import ProviderRouter
-        self.client = OpenRouterClient()
-        self.provider_router = ProviderRouter(self.client, self.memory_store)
+        self.provider_router = ProviderRouter(None, self.memory_store)
+        self.client = self.provider_router
     
     async def chat(
         self,
@@ -396,7 +396,7 @@ class ChatRouter:
             if "orchestrator" in db_roles:
                 item = db_roles["orchestrator"]
                 if isinstance(item, dict):
-                    prov = item.get("provider", "openrouter")
+                    prov = item.get("provider", "amd-cloud")
                     mid = item.get("model_id", "")
                     if mid:
                         return f"{prov}:{mid}"
@@ -419,32 +419,15 @@ class ChatRouter:
         tools_schema = self.tool_manager.get_openai_tools_schema()
         
         target_model = str(model_type).strip()
-        prov_prefix = "openrouter"
+        prov_prefix = "amd-cloud"
         if ":" in target_model:
             prov_prefix = target_model.split(":", 1)[0].lower().strip()
-        elif target_model.startswith("google/"):
-            prov_prefix = "google"
-        elif target_model.startswith("openai/"):
-            prov_prefix = "openai"
-        elif target_model.startswith("anthropic/"):
-            prov_prefix = "anthropic"
-        elif target_model.startswith("groq/"):
-            prov_prefix = "groq"
-        elif target_model.startswith("mistral/"):
-            prov_prefix = "mistral"
 
-        direct_providers = ["google", "gemini", "openai", "anthropic", "claude", "groq", "mistral"]
-        use_direct = hasattr(self, "provider_router") and self.provider_router and prov_prefix in direct_providers
+        use_direct = hasattr(self, "provider_router") and self.provider_router is not None
 
         if use_direct:
-            key = self.provider_router.get_api_key_for_provider(prov_prefix)
-            if not key:
-                prov_disp = "Google AI Studio" if prov_prefix in ["google", "gemini"] else "Mistral AI" if prov_prefix == "mistral" else prov_prefix.capitalize()
-                return {
-                    "content": f"⚠️ No {prov_disp} API Key registered. Please add your {prov_disp} API key in Settings -> Models & API Keys to use {prov_disp} directly.",
-                    "model_id": target_model,
-                    "tokens_used": 0
-                }
+            # Local AMD Radeon cloud and local model execution is always enabled
+            pass
 
         max_iterations = 25
         total_tokens = 0
@@ -676,7 +659,7 @@ class ChatRouter:
             if role in db_roles:
                 item = db_roles[role]
                 if isinstance(item, dict):
-                    prov = item.get("provider", "openrouter")
+                    prov = item.get("provider", "amd-cloud")
                     mid = item.get("model_id", "")
                     if mid:
                         return f"{prov}:{mid}"
@@ -701,7 +684,7 @@ class ChatRouter:
                 assistant_content = rows[1]["content_raw"]
                 
                 combined = f"User: {user_content}\nAssistant: {assistant_content}"
-                summary_model = self._get_assigned_model_for_role("summary", "openrouter:qwen/qwen3.5-flash-02-23")
+                summary_model = self._get_assigned_model_for_role("summary", "amd-cloud:amd-cloud/qwen-2.5-7b-instruct")
                 
                 summary = await self.client.summarize_content(
                     content=combined,
@@ -718,7 +701,7 @@ class ChatRouter:
     async def _extract_and_save_facts(self, user_message: str, tags: List[str]):
         """Extract factual memories, consolidate with existing memories, and auto-update."""
         try:
-            summary_model = self._get_assigned_model_for_role("summary", "openrouter:qwen/qwen3.5-flash-02-23")
+            summary_model = self._get_assigned_model_for_role("summary", "amd-cloud:amd-cloud/qwen-2.5-7b-instruct")
             facts = await self.client.extract_memory_facts(user_message, model_id=summary_model)
             if not facts:
                 return

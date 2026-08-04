@@ -27,7 +27,8 @@ import {
   SearchOutlined,
   TableOutlined,
   ApiOutlined,
-  SyncOutlined
+  SyncOutlined,
+  DashboardOutlined
 } from '@ant-design/icons';
 const { Dragger } = Upload;
 import { useState, useEffect, useRef } from 'react';
@@ -74,36 +75,31 @@ export default function ChatPanel() {
     model_id: string;
   }
   const [roleModels, setRoleModels] = useState<Record<string, RoleConfig>>({
-    orchestrator: { provider: 'openrouter', model_id: 'qwen/qwen3.5-flash-02-23' },
-    coding: { provider: 'openrouter', model_id: 'deepseek/deepseek-v4-flash' },
-    reasoning: { provider: 'openrouter', model_id: 'deepseek/deepseek-v4-pro' },
-    multimodal: { provider: 'openrouter', model_id: 'google/gemini-2.5-flash-lite' },
-    synthesizer: { provider: 'openrouter', model_id: 'google/gemini-2.5-flash-lite' },
-    summary: { provider: 'openrouter', model_id: 'openai/gpt-oss-120b' },
-    stt: { provider: 'groq', model_id: 'whisper-large-v3' },
-    tts: { provider: 'google', model_id: 'gemini-2.5-flash-tts' }
+    orchestrator: { provider: 'amd-cloud', model_id: 'amd-cloud/llama-3-8b-instruct' },
+    coding: { provider: 'amd-cloud', model_id: 'amd-cloud/qwen-2.5-7b-instruct' },
+    reasoning: { provider: 'amd-cloud', model_id: 'amd-cloud/llama-3-8b-instruct' },
+    multimodal: { provider: 'amd-cloud', model_id: 'amd-cloud/qwen-2.5-7b-instruct' },
+    synthesizer: { provider: 'amd-cloud', model_id: 'amd-cloud/llama-3-8b-instruct' },
+    summary: { provider: 'amd-cloud', model_id: 'amd-cloud/qwen-2.5-7b-instruct' }
   });
   const [providerCatalog, setProviderCatalog] = useState<Record<string, Array<{id: string; name: string; cost_label: string; is_active: boolean}>>>({});
-  const [apiKeys, setApiKeys] = useState<Array<{id: string; provider: string; label: string; masked_value: string; is_active: number}>>([]);
-  const [newProvider, setNewProvider] = useState<string>('openrouter');
-  const [newKeyValue, setNewKeyValue] = useState<string>('');
-  const [newKeyLabel, setNewKeyLabel] = useState<string>('');
-  const [isTestingKey, setIsTestingKey] = useState<boolean>(false);
 
-  // Model Tracker & Notes State
-  const [trackerData, setTrackerData] = useState<Array<{
-    model_id: string;
-    name: string;
-    provider: string;
-    cost_label: string;
-    is_active: boolean;
-    is_favorite: boolean;
-    notes: string;
-    call_count: number;
-    last_used: string | null;
-  }>>([]);
-  const [trackerSearch, setTrackerSearch] = useState<string>('');
-  const [isLoadingTracker, setIsLoadingTracker] = useState<boolean>(false);
+
+  // AMD Cloud & GPU Hardware Telemetry Dials
+  const [amdCloudUrl, setAmdCloudUrl] = useState<string>('http://127.0.0.1:8000/v1');
+  const [amdCloudKey, setAmdCloudKey] = useState<string>('');
+  const [gpuMetrics, setGpuMetrics] = useState<any>({
+    gpu_name: 'AMD Radeon Pro V620 (Shared Template)',
+    utilization: 0,
+    temperature: 0,
+    vram_used: 0,
+    vram_total: 16384,
+    tps: 0,
+    driver_version: 'ROCm 6.1',
+    status: 'Connecting...'
+  });
+
+
 
   // MCP Settings State Hooks
   const [mcpServers, setMcpServers] = useState<any[]>([]);
@@ -143,32 +139,10 @@ export default function ChatPanel() {
       console.error('Failed to load role models:', err);
     }
     // Pre-fetch catalogs for all supported providers
-    ['openrouter', 'google', 'openai', 'anthropic', 'groq', 'mistral'].forEach(p => loadProviderModels(p));
+    ['amd-cloud', 'local'].forEach(p => loadProviderModels(p));
   };
 
-  const loadTrackerData = async () => {
-    setIsLoadingTracker(true);
-    try {
-      const res: any = await invoke('get_model_tracker_data');
-      if (res?.models && Array.isArray(res.models)) {
-        setTrackerData(res.models);
-      }
-    } catch (err) {
-      console.error('Failed to load tracker data:', err);
-    } finally {
-      setIsLoadingTracker(false);
-    }
-  };
 
-  const handleSaveModelNote = async (modelId: string, provider: string, isFavorite: boolean, notes: string) => {
-    try {
-      await invoke('save_model_note', { modelId, provider, isFavorite, notes });
-      setTrackerData(prev => prev.map(m => m.model_id === modelId ? { ...m, is_favorite: isFavorite, notes } : m));
-      antdMessage.success('Model note updated!');
-    } catch (err) {
-      antdMessage.error(`Failed to save model note: ${err}`);
-    }
-  };
 
   const getCleanModelId = (rawModelId: string, provider: string) => {
     if (!rawModelId) return '';
@@ -229,68 +203,7 @@ export default function ChatPanel() {
     }
   };
 
-  const loadApiKeys = async () => {
-    try {
-      const res: any = await invoke('get_api_keys');
-      if (Array.isArray(res)) {
-        setApiKeys(res);
-      }
-    } catch (err) {
-      console.error('Failed to load API keys:', err);
-    }
-  };
 
-  const handleAddApiKey = async () => {
-    if (!newKeyValue.trim()) {
-      antdMessage.warning('Please enter an API Key value');
-      return;
-    }
-    try {
-      await invoke('add_api_key', {
-        provider: newProvider,
-        keyValue: newKeyValue.trim(),
-        key_value: newKeyValue.trim(),
-        label: newKeyLabel.trim() || undefined
-      });
-      antdMessage.success(`API Key for [${newProvider}] saved to SQLite database!`);
-      setNewKeyValue('');
-      setNewKeyLabel('');
-      await loadApiKeys();
-    } catch (err) {
-      antdMessage.error(`Failed to save API Key: ${err}`);
-    }
-  };
-
-  const handleDeleteApiKey = async (provider: string) => {
-    try {
-      await invoke('delete_api_key', { provider });
-      antdMessage.success(`API Key for [${provider}] removed`);
-      await loadApiKeys();
-    } catch (err) {
-      antdMessage.error(`Failed to delete API Key: ${err}`);
-    }
-  };
-
-  const handleTestApiKey = async (provider: string, keyValue?: string) => {
-    setIsTestingKey(true);
-    try {
-      const val = keyValue || newKeyValue.trim() || undefined;
-      const res: any = await invoke('test_api_key', {
-        provider,
-        keyValue: val,
-        key_value: val
-      });
-      if (res && res.success) {
-        antdMessage.success(`⚡ ${provider.toUpperCase()} API Key test successful!`);
-      } else {
-        antdMessage.error(`API Key test failed: ${res?.error || 'Unknown error'}`);
-      }
-    } catch (err) {
-      antdMessage.error(`Failed to test API Key: ${err}`);
-    } finally {
-      setIsTestingKey(false);
-    }
-  };
 
   // Lightbox Preview & Image helper
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string; path?: string } | null>(null);
@@ -679,14 +592,49 @@ export default function ChatPanel() {
     }
   };
 
+  const handleSaveAmdConfig = async () => {
+    try {
+      await invoke('update_amd_cloud_config', { endpointUrl: amdCloudUrl, apiKey: amdCloudKey });
+      antdMessage.success('AMD Radeon Cloud configuration updated successfully!');
+    } catch (error) {
+      antdMessage.error(`Failed to update AMD configuration: ${error}`);
+    }
+  };
+
   useEffect(() => {
+    let interval: any;
     if (isSettingsOpen) {
       loadRoleModels();
-      loadApiKeys();
       loadMemories();
-      loadTrackerData();
       loadMcpServers();
+
+      // Fetch AMD Cloud configuration
+      invoke('get_amd_cloud_config')
+        .then((res: any) => {
+          if (res) {
+            setAmdCloudUrl(res.endpoint_url || 'http://127.0.0.1:8000/v1');
+            setAmdCloudKey(res.api_key || '');
+          }
+        })
+        .catch(err => console.error('Failed to load AMD Cloud config:', err));
+
+      // Poll GPU metrics
+      const pollGpuMetrics = () => {
+        invoke('get_amd_gpu_metrics')
+          .then((res: any) => {
+            if (res) {
+              setGpuMetrics(res);
+            }
+          })
+          .catch(err => console.error('Failed to fetch GPU metrics:', err));
+      };
+
+      pollGpuMetrics();
+      interval = setInterval(pollGpuMetrics, 1500);
     }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [isSettingsOpen]);
 
   const handleAddMemory = async () => {
@@ -842,75 +790,139 @@ export default function ChatPanel() {
         }}
       >
         <Tabs
-          defaultActiveKey="models"
+          defaultActiveKey="amd_cloud"
           items={[
             {
-              key: 'models',
-              label: <span><KeyOutlined /> Models & API Keys</span>,
+              key: 'amd_cloud',
+              label: <span><DashboardOutlined style={{ marginRight: '6px' }} />AMD Radeon Cloud & Telemetry</span>,
               children: (
                 <div style={{ marginTop: '8px' }}>
                   <Typography.Paragraph type="secondary" style={{ marginBottom: '16px', fontSize: '13px' }}>
-                    Configure models for each agent role. Swapping a model updates Redis hot-cache instantly and takes effect from the very next prompt! Add provider API keys below.
+                    Configure the AMD Radeon Cloud remote container endpoints or local vLLM/Ollama servers. Telemetry dials track hardware performance in real-time.
+                  </Typography.Paragraph>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                    <Card size="small" title="⚡ Connection Settings" style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div>
+                          <span style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>AMD Radeon Cloud / local API Endpoint URL</span>
+                          <Input
+                            placeholder="e.g. http://127.0.0.1:8000/v1"
+                            value={amdCloudUrl}
+                            onChange={e => setAmdCloudUrl(e.target.value)}
+                            style={{ background: '#0f172a', color: '#f8fafc', borderColor: '#334155' }}
+                          />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Access Token / Container Key</span>
+                          <Input.Password
+                            placeholder="Optional authentication header key"
+                            value={amdCloudKey}
+                            onChange={e => setAmdCloudKey(e.target.value)}
+                            style={{ background: '#0f172a', color: '#f8fafc', borderColor: '#334155' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                          <Button
+                            type="primary"
+                            icon={<SaveOutlined />}
+                            onClick={handleSaveAmdConfig}
+                            style={{ background: '#0284c7', borderColor: '#0284c7' }}
+                          >
+                            Save Endpoint
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+
+                    <Card size="small" title="📊 Live GPU Hardware Dials" style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
+                        <div>
+                          <span style={{ color: '#64748b' }}>Active Device:</span>{' '}
+                          <Tag color="cyan" style={{ marginLeft: '4px' }}>{gpuMetrics.gpu_name}</Tag>
+                        </div>
+                        <div>
+                          <span style={{ color: '#64748b' }}>Status:</span>{' '}
+                          <Tag color={gpuMetrics.status?.includes('Active') ? 'success' : 'warning'} style={{ marginLeft: '4px' }}>
+                            {gpuMetrics.status}
+                          </Tag>
+                        </div>
+                        
+                        <div style={{ marginTop: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '12px' }}>
+                            <span style={{ color: '#cbd5e1' }}>GPU Core Utilization</span>
+                            <span style={{ color: '#38bdf8', fontWeight: 600 }}>{gpuMetrics.utilization}%</span>
+                          </div>
+                          <div style={{ width: '100%', height: '8px', background: '#334155', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ width: `${gpuMetrics.utilization}%`, height: '100%', background: 'linear-gradient(90deg, #38bdf8, #0284c7)', transition: 'width 0.4s ease' }}></div>
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '12px' }}>
+                            <span style={{ color: '#cbd5e1' }}>Dedicated VRAM Allocation</span>
+                            <span style={{ color: '#38bdf8', fontWeight: 600 }}>{Math.round(gpuMetrics.vram_used)} MB / {Math.round(gpuMetrics.vram_total)} MB</span>
+                          </div>
+                          <div style={{ width: '100%', height: '8px', background: '#334155', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ width: `${(gpuMetrics.vram_used / gpuMetrics.vram_total) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #a855f7, #6366f1)', transition: 'width 0.4s ease' }}></div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '8px', fontSize: '12px' }}>
+                          <div>
+                            <span style={{ color: '#64748b' }}>Core Temp:</span>{' '}
+                            <span style={{ color: gpuMetrics.temperature > 70 ? '#f43f5e' : '#22c55e', fontWeight: 600 }}>{gpuMetrics.temperature}°C</span>
+                          </div>
+                          <div>
+                            <span style={{ color: '#64748b' }}>Generation Speed:</span>{' '}
+                            <span style={{ color: '#eab308', fontWeight: 600 }}>{gpuMetrics.tps} TPS</span>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+                </div>
+              )
+            },
+            {
+              key: 'models',
+              label: <span><CodeOutlined style={{ marginRight: '6px' }} />Model Roles Settings</span>,
+              children: (
+                <div style={{ marginTop: '8px' }}>
+                  <Typography.Paragraph type="secondary" style={{ marginBottom: '16px', fontSize: '13px' }}>
+                    Configure the model names for each specialized agent role running locally or in your AMD GPU container. You can type any custom model ID or select from templates.
                   </Typography.Paragraph>
 
                   {/* Role Model Configuration Cards */}
-                  <Typography.Text strong style={{ color: '#38bdf8', display: 'block', marginBottom: '12px', fontSize: '14px' }}>
-                    ⚡ Dynamic Role Model Assignments
-                  </Typography.Text>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                     {[
-                      { role: 'orchestrator', label: '⚡ Main Orchestrator', desc: 'Fast, always-on default chat router' },
-                      { role: 'coding', label: '🤖 Coding Sub-Agent', desc: 'Code generation & execution specialist' },
-                      { role: 'reasoning', label: '💡 Reasoning Sub-Agent', desc: 'Architecture, logic & edge-case specialist' },
-                      { role: 'multimodal', label: '👁️ Multimodal Specialist', desc: 'Image, media & document analyzer' },
-                      { role: 'synthesizer', label: '🧩 Consensus Synthesizer', desc: 'Merges multi-model team outputs' },
-                      { role: 'summary', label: '🧠 Background Summarizer & Memory', desc: 'Context compression & fact extraction' },
-                      { role: 'stt', label: '🎙️ Speech-to-Text (STT) Dictation', desc: 'Audio transcription model dropdown' },
-                      { role: 'tts', label: '🔊 Text-to-Speech (TTS) Voice', desc: 'Speech synthesis model dropdown' },
+                      { role: 'orchestrator', label: '⚡ Main Orchestrator', desc: 'Default task classifier & central coordinator' },
+                      { role: 'coding', label: '🤖 Coding Sub-Agent', desc: 'Code generator, debugger, and execution specialist' },
+                      { role: 'reasoning', label: '💡 Reasoning Sub-Agent', desc: 'Architectural planning, deep logic, and peer-reviewer' },
+                      { role: 'multimodal', label: '👁️ Multimodal Specialist', desc: 'Handles vision, audio, and media attachments' },
+                      { role: 'synthesizer', label: '🧩 Consensus Synthesizer', desc: 'Merges parallel team contributions into master output' },
+                      { role: 'summary', label: '🧠 Background Summarizer & Memory', desc: 'Short-term context compression and factual extraction' }
                     ].map(r => {
-                      const roleConfig = roleModels[r.role] || { provider: 'openrouter', model_id: '' };
-                      const currentProvider = roleConfig.provider || 'openrouter';
+                      const roleConfig = roleModels[r.role] || { provider: 'amd-cloud', model_id: '' };
+                      const currentProvider = roleConfig.provider || 'amd-cloud';
                       const cleanModelId = getCleanModelId(roleConfig.model_id, currentProvider);
 
                       let catalogForProvider = providerCatalog[currentProvider] || [];
-
-                      // Apply strict role-specific filtering for STT and TTS models (do NOT fall back to non-audio models)
-                      if (r.role === 'stt') {
-                        catalogForProvider = catalogForProvider.filter(m => 
-                          m.id.toLowerCase().includes('whisper') ||
-                          m.id.toLowerCase().includes('stt') ||
-                          m.id.toLowerCase().includes('audio') ||
-                          m.id.toLowerCase().includes('transcribe') ||
-                          m.name.toLowerCase().includes('speech-to-text') ||
-                          m.name.toLowerCase().includes('stt')
-                        );
-                      } else if (r.role === 'tts') {
-                        catalogForProvider = catalogForProvider.filter(m => 
-                          m.id.toLowerCase().includes('tts') ||
-                          m.id.toLowerCase().includes('voice') ||
-                          m.id.toLowerCase().includes('speech') ||
-                          m.name.toLowerCase().includes('text-to-speech') ||
-                          m.name.toLowerCase().includes('tts')
-                        );
-                      }
-
                       let selectOptions = catalogForProvider.map(m => {
                         const cleanOptVal = getCleanModelId(m.id, currentProvider);
                         return {
                           value: cleanOptVal,
-                          disabled: !m.is_active,
-                          label: `${m.name} (${m.cost_label})`,
+                          label: m.name,
                         };
                       });
 
-                      // If currently assigned model ID is valid and not in options, inject fallback option so it displays cleanly!
-                      if (cleanModelId && !selectOptions.some(o => o.value === cleanModelId)) {
-                        selectOptions.unshift({
-                          value: cleanModelId,
-                          disabled: false,
-                          label: `${cleanModelId} (Active Assignment)`
-                        });
+                      // Ensure fallback/default templates are available if list is empty
+                      if (selectOptions.length === 0) {
+                        selectOptions = [
+                          { value: 'amd-cloud/llama-3-8b-instruct', label: 'Llama 3 8B Instruct (AMD Cloud Template)' },
+                          { value: 'amd-cloud/qwen-2.5-7b-instruct', label: 'Qwen 2.5 Coder 7B (AMD Cloud Template)' },
+                          { value: 'amd-cloud/mistral-7b-instruct', label: 'Mistral 7B Instruct (AMD Cloud Template)' }
+                        ];
                       }
 
                       return (
@@ -918,131 +930,34 @@ export default function ChatPanel() {
                           <div style={{ fontWeight: 600, color: '#f8fafc', marginBottom: '2px', fontSize: '13px' }}>{r.label}</div>
                           <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px' }}>{r.desc}</div>
                           
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <Select
-                              size="small"
-                              value={currentProvider}
-                              onChange={(newProv) => handleProviderChange(r.role, newProv)}
-                              style={{ width: '100%' }}
-                              options={[
-                                { value: 'openrouter', label: '🌐 OpenRouter' },
-                                { value: 'google', label: '🟢 Google AI Studio' },
-                                { value: 'openai', label: '🤖 OpenAI' },
-                                { value: 'anthropic', label: '🧠 Anthropic' },
-                                { value: 'groq', label: '🚀 Groq' },
-                                { value: 'mistral', label: '🇪🇺 Mistral AI' },
-                              ]}
-                            />
-
-                            <Select
-                              size="small"
-                              showSearch
-                              popupMatchSelectWidth={false}
-                              value={cleanModelId || undefined}
-                              placeholder={r.role === 'tts' && selectOptions.length === 0 ? "No TTS models available" : "Select model..."}
-                              notFoundContent={r.role === 'tts' || r.role === 'stt' ? "No audio models available for this provider" : "No models found"}
-                              onChange={(newModelId) => handleUpdateRoleModel(r.role, currentProvider, newModelId)}
-                              style={{ width: '100%' }}
-                              filterOption={(input, option) =>
-                                ((option?.label as string) || '').toLowerCase().includes(input.toLowerCase()) ||
-                                ((option?.value as string) || '').toLowerCase().includes(input.toLowerCase())
-                              }
-                              options={selectOptions}
-                              optionRender={(option) => {
-                                const m = catalogForProvider.find(item => getCleanModelId(item.id, currentProvider) === option.value);
-                                return (
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', opacity: (m ? m.is_active : true) ? 1 : 0.45, gap: '12px' }}>
-                                    <span style={{ fontSize: '12px', color: (m ? m.is_active : true) ? '#f8fafc' : '#64748b', fontWeight: 500 }}>
-                                      {m?.name || option.value}
-                                    </span>
-                                    <Tag color={(m ? m.is_active : true) ? 'cyan' : 'default'} style={{ fontSize: '10px', margin: 0 }}>
-                                      {m?.cost_label || 'Active'}
-                                    </Tag>
-                                  </div>
-                                );
-                              }}
-                            />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div>
+                              <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Choose Template Model</span>
+                              <Select
+                                size="small"
+                                showSearch
+                                style={{ width: '100%' }}
+                                value={cleanModelId || undefined}
+                                placeholder="Select model template..."
+                                onChange={(newModelId) => handleUpdateRoleModel(r.role, currentProvider, newModelId)}
+                                options={selectOptions}
+                              />
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Or Type Custom Model ID</span>
+                              <Input
+                                size="small"
+                                placeholder="e.g. llama3:latest / custom-model"
+                                value={cleanModelId}
+                                onChange={(e) => handleUpdateRoleModel(r.role, currentProvider, e.target.value)}
+                                style={{ background: '#0f172a', color: '#f8fafc', borderColor: '#334155', fontSize: '12px' }}
+                              />
+                            </div>
                           </div>
                         </Card>
                       );
                     })}
                   </div>
-
-                  {/* API Key Management */}
-                  <Typography.Text strong style={{ color: '#38bdf8', display: 'block', marginBottom: '12px', fontSize: '14px' }}>
-                    🔑 Provider API Keys (SQLite Stored)
-                  </Typography.Text>
-
-                  <Card size="small" title="Add / Update Provider API Key" style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(255, 255, 255, 0.1)', marginBottom: '16px' }}>
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                      <Select
-                        value={newProvider}
-                        onChange={setNewProvider}
-                        style={{ width: 160 }}
-                        options={[
-                          { value: 'openrouter', label: 'OpenRouter' },
-                          { value: 'openai', label: 'OpenAI' },
-                          { value: 'google', label: 'Google AI Studio' },
-                          { value: 'anthropic', label: 'Anthropic' },
-                          { value: 'groq', label: 'Groq (Ultra Fast)' },
-                          { value: 'mistral', label: 'Mistral AI' },
-                        ]}
-                      />
-                      <Input
-                        placeholder="Label (optional, e.g. Primary Key)"
-                        value={newKeyLabel}
-                        onChange={e => setNewKeyLabel(e.target.value)}
-                        style={{ width: 220, background: '#0f172a', color: '#f8fafc', borderColor: '#334155' }}
-                      />
-                    </div>
-                    <Input.Password
-                      placeholder="Paste API Key (gsk_... / mk-... / sk-or-v1-...)"
-                      value={newKeyValue}
-                      onChange={e => setNewKeyValue(e.target.value)}
-                      style={{ marginBottom: '12px', background: '#0f172a', color: '#f8fafc', borderColor: '#334155' }}
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                      <Button
-                        icon={<ExperimentOutlined />}
-                        loading={isTestingKey}
-                        onClick={() => handleTestApiKey(newProvider, newKeyValue)}
-                      >
-                        Test Key
-                      </Button>
-                      <Button
-                        type="primary"
-                        icon={<SaveOutlined />}
-                        onClick={handleAddApiKey}
-                        style={{ background: '#0284c7', borderColor: '#0284c7' }}
-                      >
-                        Save API Key
-                      </Button>
-                    </div>
-                  </Card>
-
-                  {/* Registered API Keys List */}
-                  <List
-                    size="small"
-                    dataSource={apiKeys}
-                    locale={{ emptyText: 'No custom API keys registered in SQLite. System is using .env fallbacks.' }}
-                    renderItem={k => (
-                      <List.Item
-                        style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', padding: '8px 12px' }}
-                        actions={[
-                          <Button size="small" icon={<ExperimentOutlined />} onClick={() => handleTestApiKey(k.provider)}>Test</Button>,
-                          <Popconfirm title="Delete this API Key?" onConfirm={() => handleDeleteApiKey(k.provider)}>
-                            <Button size="small" icon={<DeleteOutlined />} danger>Remove</Button>
-                          </Popconfirm>
-                        ]}
-                      >
-                        <div>
-                          <Tag color="cyan" style={{ fontWeight: 600 }}>{k.provider.toUpperCase()}</Tag>
-                          <span style={{ color: '#f8fafc', fontSize: '13px', marginRight: '8px' }}>{k.label}</span>
-                          <span style={{ color: '#64748b', fontSize: '12px', fontFamily: 'monospace' }}>({k.masked_value})</span>
-                        </div>
-                      </List.Item>
-                    )}
-                  />
                 </div>
               )
             },
@@ -1121,118 +1036,6 @@ export default function ChatPanel() {
                         )}
                       </List.Item>
                     )}
-                  />
-                </div>
-              )
-            },
-            {
-              key: 'tracker',
-              label: <span><TableOutlined /> Model Catalog & Tracker</span>,
-              children: (
-                <div style={{ marginTop: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <Typography.Paragraph type="secondary" style={{ margin: 0, fontSize: '13px' }}>
-                      Keep track of recently used models, mark favorites, and add custom notes for each model (persisted in SQLite).
-                    </Typography.Paragraph>
-                    <Input
-                      placeholder="Search models..."
-                      prefix={<SearchOutlined />}
-                      value={trackerSearch}
-                      onChange={e => setTrackerSearch(e.target.value)}
-                      style={{ width: 220, background: '#0f172a', color: '#f8fafc', borderColor: '#334155' }}
-                    />
-                  </div>
-
-                  <Table
-                    size="small"
-                    loading={isLoadingTracker}
-                    dataSource={trackerData
-                      .filter(m => 
-                        m.name.toLowerCase().includes(trackerSearch.toLowerCase()) ||
-                        m.model_id.toLowerCase().includes(trackerSearch.toLowerCase()) ||
-                        m.provider.toLowerCase().includes(trackerSearch.toLowerCase()) ||
-                        m.notes.toLowerCase().includes(trackerSearch.toLowerCase())
-                      )
-                      .sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0))
-                    }
-                    rowKey="model_id"
-                    pagination={{ pageSize: 8, size: 'small' }}
-                    columns={[
-                      {
-                        title: '⭐',
-                        dataIndex: 'is_favorite',
-                        key: 'is_favorite',
-                        width: 45,
-                        render: (isFav, record) => (
-                          <Button
-                            type="text"
-                            size="small"
-                            icon={isFav ? <StarFilled style={{ color: '#f59e0b' }} /> : <StarOutlined style={{ color: '#64748b' }} />}
-                            onClick={() => handleSaveModelNote(record.model_id, record.provider, !isFav, record.notes)}
-                          />
-                        )
-                      },
-                      {
-                        title: 'Model',
-                        dataIndex: 'name',
-                        key: 'name',
-                        render: (name, record) => (
-                          <div>
-                            <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '12px' }}>{name}</div>
-                            <div style={{ fontSize: '11px', color: '#64748b', fontFamily: 'monospace' }}>{record.model_id}</div>
-                          </div>
-                        )
-                      },
-                      {
-                        title: 'Provider',
-                        dataIndex: 'provider',
-                        key: 'provider',
-                        width: 110,
-                        render: (prov) => (
-                          <Tag color="cyan" style={{ fontSize: '10px', textTransform: 'uppercase' }}>{prov}</Tag>
-                        )
-                      },
-                      {
-                        title: 'Pricing',
-                        dataIndex: 'cost_label',
-                        key: 'cost_label',
-                        width: 140,
-                        render: (cost) => (
-                          <span style={{ fontSize: '11px', color: '#94a3b8' }}>{cost}</span>
-                        )
-                      },
-                      {
-                        title: 'Usage',
-                        dataIndex: 'call_count',
-                        key: 'call_count',
-                        width: 90,
-                        render: (count) => (
-                          <Tag color={count > 0 ? 'blue' : 'default'} style={{ fontSize: '11px' }}>
-                            {count} calls
-                          </Tag>
-                        )
-                      },
-                      {
-                        title: '📝 User Notes',
-                        dataIndex: 'notes',
-                        key: 'notes',
-                        render: (notes, record) => (
-                          <Input.TextArea
-                            rows={1}
-                            size="small"
-                            placeholder="Add note..."
-                            defaultValue={notes}
-                            onBlur={(e) => {
-                              const val = e.target.value;
-                              if (val !== record.notes) {
-                                handleSaveModelNote(record.model_id, record.provider, record.is_favorite, val);
-                              }
-                            }}
-                            style={{ background: '#0f172a', color: '#f8fafc', borderColor: '#334155', fontSize: '11px', resize: 'vertical' }}
-                          />
-                        )
-                      }
-                    ]}
                   />
                 </div>
               )
@@ -1656,7 +1459,6 @@ export default function ChatPanel() {
                 setIsSettingsOpen(true);
                 await loadMemories();
                 await loadRoleModels();
-                await loadApiKeys();
               }}
             />
           </Tooltip>

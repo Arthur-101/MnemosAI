@@ -267,7 +267,7 @@ data/
   - MultiModal Sub-Agent File Attachment Forwarding (`sub_agent_manager.py`, `chat_router.py`): Fixed two-layer issue: (1) `chat_router.py` was detecting attachments via `[Attached Image:]` tag only — updated to parse `[Attached File: name | Path: ...]` regex and extract file paths. (2) `SubAgentManager._call_agent()` now accepts `file_paths` parameter, reads image files from disk, base64-encodes them, and constructs OpenAI-compatible `image_url` content blocks before sending to the multimodal agent. Non-image files are embedded as text content.
   - Google AI Studio `inlineData` Vision Support (`provider_router.py`): Rewrote `_generate_google_direct()` to convert OpenAI-style `image_url` content blocks into Gemini's native `inlineData: {mimeType, data}` format. Previously, `extract_text_content()` stripped all image data from content lists before building the Gemini API payload.
   - OpenAI Direct API Vision Content Block Preservation (`provider_router.py`): Updated `_generate_openai_direct()` to preserve `image_url` and `text` typed content blocks when message content is a list, instead of stripping them to plain text via `extract_text_content()`.
-- **Spotify MCP Server & Windows CLI Autolaunch Patches (`data/mcp-spotify-server/`, `auth.js`, `logger.js`)**:
+  - **Spotify MCP Server & Windows CLI Autolaunch Patches (`data/mcp-spotify-server/`, `auth.js`, `logger.js`)**:
   - Pre-installed the `@darrenjaws/spotify-mcp` package locally to run offline and bypass Node v24 npx peer dependency bugs.
   - Patched `auth.js` to replace Windows browser launch commands with `cmd.exe /c start` utilizing `{ shell: true }` and outer quotes, resolving `cmd.exe` command-line argument truncation bugs at `&` characters.
   - Wrapped dynamic `child_process.spawn` calls in robust `try...catch` and dynamic import Promise `.catch()` handlers to eliminate fatal unhandled promise rejections that crash the Node.js process.
@@ -275,17 +275,15 @@ data/
   - Created a manual OAuth authentication script (`data/test_spotify_auth.py`) that boots the server and holds the callback listener open for up to 5 minutes to allow stress-free manual browser authorization.
 - **Tavily MCP Search Integration**:
   - Pre-installed and integrated the Tavily search client server as a local MCP server, providing robust fallback web search capability.
-
-
-
-
-
-
-
-
-
-
-
+- **100% Offline / Local AMD Radeon Cloud Architecture & Hardware Telemetry (AMD Hackathon Milestone)**:
+  - Removed all OpenRouter client instances, base URLs, and commercial API configuration catalogs.
+  - Rewrote `ProviderRouter` to dispatch completion requests directly to `{amd_cloud_url}/chat/completions` (using `AMD_CLOUD_KEY` and `AMD_CLOUD_URL`).
+  - Added compatibility class wrappers for `OpenRouterClient` and mock `Message`/`ModelType` enums inside `provider_router.py` to preserve seamless backward compatibility across all sub-agent and tool layers without refactoring call logic.
+  - Pre-populated SQLite `role_assignments` table with local model templates (e.g. `amd-cloud/llama-3-8b-instruct` and `amd-cloud/qwen-2.5-7b-instruct`).
+  - Implemented `PyTorchEmbeddingFunction` in `src/memory/vector_store.py` using `sentence-transformers` loaded locally with PyTorch. Added automatic device acceleration detection supporting CUDA/ROCm (`cuda`) or graceful fallback to CPU.
+  - Created GPU telemetry module parsing `nvidia-smi` and `rocm-smi` outputs, falling back to a realistic local simulation for ROCm MI250/MI300 chips if offline.
+  - Exposed RPC endpoints for `get_amd_cloud_config`, `update_amd_cloud_config`, and `get_amd_gpu_metrics` in `embedded_backend.py`.
+  - Refactored Tauri frontend Settings panel: removed obsolete commercial keys lists and catalog table, and built a stunning, real-time animated **AMD Radeon Cloud & Telemetry Dashboard** tracking GPU utilization, VRAM usage, core temperature, and generation speed (TPS) alongside dynamic role model ID input/dropdown forms.
 
 ## Planned Future Roadmap Tasks (Notion Tracked)
 - **Task 1: Live Token Usage & Budget Warning Tracker Widget**: Add live token/cost meter in top header bar showing expenditure ($) per session/model with dynamic OpenRouter pricing catalog sync, multi-tier protection (75% Soft Alert, 90% Auto-Downgrade, 100% Hard Cap), sub-agent cost attribution tagging, atomic Redis sync, and an analytics drawer with spending graphs.

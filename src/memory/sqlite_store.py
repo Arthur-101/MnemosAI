@@ -178,12 +178,26 @@ class SQLiteMemoryStore:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_created ON conversations(created_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tools_conversation ON tool_executions(conversation_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_cost_model ON cost_tracking(model_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_cost_created ON cost_tracking(created_at)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_tags ON messages(tags_json)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_keys_provider ON api_keys(provider)")
         
+        # Pre-populate default role assignments
+        cursor.execute("SELECT COUNT(*) as cnt FROM role_assignments")
+        row = cursor.fetchone()
+        # Handle dict-like row or tuple-like row
+        cnt = row["cnt"] if isinstance(row, dict) else row[0]
+        if cnt == 0:
+            default_roles = [
+                ("orchestrator", "amd-cloud", "amd-cloud/llama-3-8b-instruct"),
+                ("coding", "amd-cloud", "amd-cloud/qwen-2.5-7b-instruct"),
+                ("reasoning", "amd-cloud", "amd-cloud/llama-3-8b-instruct"),
+                ("summarizer", "amd-cloud", "amd-cloud/qwen-2.5-7b-instruct"),
+                ("synthesizer", "amd-cloud", "amd-cloud/llama-3-8b-instruct"),
+            ]
+            cursor.executemany(
+                "INSERT INTO role_assignments (role, provider, model_id) VALUES (?, ?, ?)",
+                default_roles
+            )
+
         self.connection.commit()
     
     def save_conversation(
@@ -1066,7 +1080,7 @@ class SessionManager:
         max_tokens: int = 2000,
     ) -> List['Message']:
         """Get conversation context for current session."""
-        from src.models.openrouter_client import Message
+        from src.models.provider_router import Message
         
         conversations = self.memory_store.get_conversation_history(
             self.current_session_id,

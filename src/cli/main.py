@@ -16,7 +16,7 @@ from rich.live import Live
 from rich.spinner import Spinner
 from rich.text import Text
 
-from src.models.openrouter_client import OpenRouterClient, ModelType, Message
+from src.models.provider_router import OpenRouterClient, ModelType, Message
 from src.controller.model_router import ModelRouter, route_and_execute, TaskType
 from src.memory.sqlite_store import SQLiteMemoryStore, SessionManager
 from src.utils.config import config

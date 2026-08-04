@@ -94,7 +94,7 @@ class SubAgentManager:
         self.client = openrouter_client
         self.provider_router = ProviderRouter(openrouter_client)
 
-    def _get_dynamic_model_for_role(self, role: str, default_model: str = "openrouter:qwen/qwen3.5-flash-02-23") -> str:
+    def _get_dynamic_model_for_role(self, role: str, default_model: str = "amd-cloud:amd-cloud/qwen-2.5-7b-instruct") -> str:
         """Fetch role model override from Redis or SQLite if available."""
         # 1. Try Redis
         if redis_store.is_connected():
@@ -107,7 +107,7 @@ class SubAgentManager:
             if role.lower() in db_roles:
                 item = db_roles[role.lower()]
                 if isinstance(item, dict):
-                    prov = item.get("provider", "openrouter")
+                    prov = item.get("provider", "amd-cloud")
                     mid = item.get("model_id", "")
                     if mid:
                         return f"{prov}:{mid}"
