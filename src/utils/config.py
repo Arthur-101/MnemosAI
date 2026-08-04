@@ -9,31 +9,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    # ── OpenRouter API ───────────────────────────────────────
-    openrouter_api_key: str = Field(..., description="OpenRouter API key")
-    openrouter_base_url: str = "https://openrouter.ai/api/v1"
-
-    # ── Model configuration ───────────────────────────────────
-    model_qwen: str = "qwen/qwen3.5-flash-02-23"
-    model_gemini_flash: str = "google/gemini-2.5-flash-lite"
-    model_mimo: str = "xiaomi/mimo-v2.5-pro"
-    model_deepseek_flash: str = "deepseek/deepseek-v4-flash"
-    model_deepseek_pro: str = "deepseek/deepseek-v4-pro"
-    model_summary: str = "openai/gpt-oss-120b"
-    
-    # ── Model Costs ──────────────────────────────────────────
-    model_qwen_cost_input: float = 0.065
-    model_qwen_cost_output: float = 0.26
-    model_gemini_flash_cost_input: float = 0.10
-    model_gemini_flash_cost_output: float = 0.40
-    model_mimo_cost_input: float = 1.0
-    model_mimo_cost_output: float = 3.0
-    model_deepseek_flash_cost_input: float = 0.14
-    model_deepseek_flash_cost_output: float = 0.28
-    model_deepseek_pro_cost_input: float = 0.435
-    model_deepseek_pro_cost_output: float = 0.87
-    model_summary_cost_input: float = 0.0
-    model_summary_cost_output: float = 0.0
+    # ── AMD Radeon Cloud Configuration ────────────────────────
+    amd_cloud_url: str = "http://127.0.0.1:8000/v1"
+    amd_cloud_key: str = ""
 
     # ── Memory configuration ─────────────────────────────────
     sqlite_db_path: str = "data/agenticai.db"
@@ -72,8 +50,8 @@ class Settings(BaseSettings):
     complexity_routing: Dict[str, str] = Field(default_factory=dict)
     
     # ── Chat enhancements ─────────────────────────────────────
-    default_chat_model: str = ""
-    system_prompt: str = "You are Antigravity, an intelligent Orchestrator AI. You have access to specialized expert sub-agents via the `ask_expert_model` tool (roles: 'coding', 'reasoning', 'multimodal', 'synthesizer'). You also have long-term memory."
+    default_chat_model: str = "amd-cloud"
+    system_prompt: str = "You are MnemosAI, an intelligent Orchestrator AI running on AMD GPU hardware. You have access to specialized expert sub-agents via the `ask_expert_model` tool (roles: 'coding', 'reasoning', 'summarizer'). You also have long-term memory."
     summary_max_tokens: int = 400
     tag_extraction_model: Optional[str] = None
 
@@ -89,67 +67,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def populate_model_dicts(self) -> "Settings":
-        # Populate model costs
-        self.model_costs = {
-            self.model_qwen: {"input": self.model_qwen_cost_input, "output": self.model_qwen_cost_output},
-            self.model_gemini_flash: {"input": self.model_gemini_flash_cost_input, "output": self.model_gemini_flash_cost_output},
-            self.model_mimo: {"input": self.model_mimo_cost_input, "output": self.model_mimo_cost_output},
-            self.model_deepseek_flash: {"input": self.model_deepseek_flash_cost_input, "output": self.model_deepseek_flash_cost_output},
-            self.model_deepseek_pro: {"input": self.model_deepseek_pro_cost_input, "output": self.model_deepseek_pro_cost_output},
-            self.model_summary: {"input": self.model_summary_cost_input, "output": self.model_summary_cost_output},
-        }
-
-        # Populate capabilities
-        self.model_capabilities = {
-            self.model_qwen: {
-                "role": "default_orchestrator",
-                "supports": {"text": True, "image": True, "video": True, "audio": False, "multimodal_reasoning": True, "tool_use": True, "long_context": True},
-                "strengths": ["fast_chat", "videos", "multimodal_parsing", "conversation", "intent_classification", "tool_routing", "lightweight_coding", "memory_handling"],
-                "best_use_cases": ["general_chat", "screenshots", "videos", "small_video_analysis", "lightweight_debugging", "tool_orchestration", "routing", "OCR", "quick_multimodal_tasks"],
-                "reasoning_level": 6, "coding_level": 6, "planning_level": 5,
-            },
-            self.model_gemini_flash: {
-                "role": "efficient_multimodal_processor",
-                "supports": {"text": True, "image": True, "video": True, "audio": True, "multimodal_reasoning": True, "tool_use": True, "long_context": True},
-                "strengths": ["OCR", "large_pdf_analysis", "video_understanding", "long_context_processing", "multimodal_extraction", "high_throughput_processing"],
-                "best_use_cases": ["large_documents", "research_extraction", "video_analysis", "audio_transcription", "long_transcripts", "memory_synthesis", "high_volume_multimodal"],
-                "reasoning_level": 7, "coding_level": 6, "planning_level": 6,
-            },
-            self.model_deepseek_pro: {
-                "role": "agentic_reasoning_engine",
-                "supports": {"text": True, "image": False, "video": False, "audio": False, "multimodal_reasoning": False, "tool_use": True, "long_context": True},
-                "strengths": ["deep_reasoning", "analysis", "agentic_reasoning", "planning", "decomposition", "workflow_design", "autonomous_reasoning", "architecture_generation", "multi_step_reasoning", "maths"],
-                "best_use_cases": ["deep_reasoning", "analysis", "AI_agents", "workflow_planning", "autonomous_systems", "multi_agent_systems", "architecture_design", "research_decomposition", "strategic_reasoning"],
-                "reasoning_level": 9, "coding_level": 10, "planning_level": 10,
-            },
-            self.model_deepseek_flash: {
-                "role": "software_engineering_specialist",
-                "supports": {"text": True, "image": False, "video": False, "audio": False, "multimodal_reasoning": False, "tool_use": True, "long_context": True},
-                "strengths": ["coding", "debugging", "reasoning", "repository_reasoning", "algorithms", "backend_architecture", "optimization", "refactoring", "devops"],
-                "best_use_cases": ["coding", "reasoning", "backend_systems", "large_codebases", "APIs", "infrastructure", "AI_pipelines", "database_optimization", "production_engineering"],
-                "reasoning_level": 8, "coding_level": 9.5, "planning_level": 7,
-            },
-            self.model_mimo: {
-                "role": "maximum_intelligence_engine",
-                "supports": {"text": True, "image": False, "video": False, "audio": False, "multimodal_reasoning": False, "tool_use": True, "long_context": True},
-                "strengths": ["very_deep_reasoning", "massive_synthesis", "research", "cross_document_analysis", "scientific_reasoning", "enterprise_reasoning", "highest_reliability"],
-                "best_use_cases": ["research_systems", "massive_documents", "enterprise_analysis", "scientific_workflows", "high_stakes_outputs", "cross_modal_reasoning", "large_scale_synthesis"],
-                "reasoning_level": 10, "coding_level": 9, "planning_level": 9,
-            },
-        }
-
-        # Populate complexity routing
-        self.complexity_routing = {
-            "0-3": self.model_qwen,
-            "4-6": self.model_gemini_flash,
-            "7-10": self.model_deepseek_flash,
-            "11-12": self.model_deepseek_pro,
-            "13+": self.model_mimo,
-        }
-        
         if not self.default_chat_model:
-            self.default_chat_model = self.model_qwen
-            
+            self.default_chat_model = "amd-cloud"
         return self
 
     # -----------------------------------------------------------------
@@ -200,30 +119,12 @@ class ConfigManager:
             directory.mkdir(parents=True, exist_ok=True)
     
     def get_model_cost(self, model_id: str, input_tokens: int, output_tokens: int) -> float:
-        """Calculate cost for a model usage."""
-        if model_id not in self.settings.model_costs:
-            model_id = self._map_model_name(model_id)
-        
-        if model_id not in self.settings.model_costs:
-            return 0.0
-        
-        cost_config = self.settings.model_costs[model_id]
-        input_cost = (input_tokens / 1_000_000) * cost_config["input"]
-        output_cost = (output_tokens / 1_000_000) * cost_config["output"]
-        
-        return input_cost + output_cost
+        """Calculate cost for a model usage (all local models are free/flat rate)."""
+        return 0.0
     
     def _map_model_name(self, model_name: str) -> str:
-        """Map friendly model names to OpenRouter model IDs."""
-        mapping = {
-            "qwen-2.5-32b-instruct": self.settings.model_qwen,
-            "gemini-2.5-flash-lite": self.settings.model_gemini_flash,
-            "mimo-v2.5-pro": self.settings.model_mimo,
-            "deepseek-v4-flash": self.settings.model_deepseek_flash,
-            "deepseek-v4-pro": self.settings.model_deepseek_pro,
-            "gpt-oss-120b": self.settings.model_summary,
-        }
-        return mapping.get(model_name, model_name)
+        """Map friendly model names."""
+        return model_name
     
     def track_cost(self, model_id: str, input_tokens: int, output_tokens: int):
         """Track cost usage and check limits."""
