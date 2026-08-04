@@ -267,19 +267,14 @@ data/
   - MultiModal Sub-Agent File Attachment Forwarding (`sub_agent_manager.py`, `chat_router.py`): Fixed two-layer issue: (1) `chat_router.py` was detecting attachments via `[Attached Image:]` tag only — updated to parse `[Attached File: name | Path: ...]` regex and extract file paths. (2) `SubAgentManager._call_agent()` now accepts `file_paths` parameter, reads image files from disk, base64-encodes them, and constructs OpenAI-compatible `image_url` content blocks before sending to the multimodal agent. Non-image files are embedded as text content.
   - Google AI Studio `inlineData` Vision Support (`provider_router.py`): Rewrote `_generate_google_direct()` to convert OpenAI-style `image_url` content blocks into Gemini's native `inlineData: {mimeType, data}` format. Previously, `extract_text_content()` stripped all image data from content lists before building the Gemini API payload.
   - OpenAI Direct API Vision Content Block Preservation (`provider_router.py`): Updated `_generate_openai_direct()` to preserve `image_url` and `text` typed content blocks when message content is a list, instead of stripping them to plain text via `extract_text_content()`.
-
-
-
-
-
-
-
-
-
-
-
-
-
+- **Spotify MCP Server & Windows CLI Autolaunch Patches (`data/mcp-spotify-server/`, `auth.js`, `logger.js`)**:
+  - Pre-installed the `@darrenjaws/spotify-mcp` package locally to run offline and bypass Node v24 npx peer dependency bugs.
+  - Patched `auth.js` to replace Windows browser launch commands with `cmd.exe /c start` utilizing `{ shell: true }` and outer quotes, resolving `cmd.exe` command-line argument truncation bugs at `&` characters.
+  - Wrapped dynamic `child_process.spawn` calls in robust `try...catch` and dynamic import Promise `.catch()` handlers to eliminate fatal unhandled promise rejections that crash the Node.js process.
+  - Patched `logger.js` to catch JS `Error` instances and print their full message/stack trace instead of serializing to empty JSON `{}` logs.
+  - Created a manual OAuth authentication script (`data/test_spotify_auth.py`) that boots the server and holds the callback listener open for up to 5 minutes to allow stress-free manual browser authorization.
+- **Tavily MCP Search Integration**:
+  - Pre-installed and integrated the Tavily search client server as a local MCP server, providing robust fallback web search capability.
 
 
 
