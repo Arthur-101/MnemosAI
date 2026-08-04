@@ -6,8 +6,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class PyTorchEmbeddingFunction:
+class PyTorchEmbeddingFunction(chromadb.EmbeddingFunction):
     """Custom ChromaDB embedding function using PyTorch sentence-transformers locally with GPU acceleration."""
+    def name(self) -> str:
+        return "PyTorchEmbeddingFunction"
+
     def __init__(self):
         try:
             import torch
@@ -42,24 +45,31 @@ class VectorMemoryStore:
         
         # Create or get collections
         try:
-            self.chat_collection = self.client.get_or_create_collection(
-                name="chat_history",
-                metadata={"hnsw:space": "cosine"},
-                embedding_function=self.embedding_fn
-            )
-            self.user_memories_collection = self.client.get_or_create_collection(
-                name="user_memories",
-                metadata={"hnsw:space": "cosine"},
-                embedding_function=self.embedding_fn
-            )
-            self.document_collection = self.client.get_or_create_collection(
-                name="documents",
-                metadata={"hnsw:space": "cosine"},
-                embedding_function=self.embedding_fn
-            )
+            self.chat_collection = self._get_or_create_helper("chat_history")
+            self.user_memories_collection = self._get_or_create_helper("user_memories")
+            self.document_collection = self._get_or_create_helper("documents")
         except Exception as e:
             logger.error(f"Failed to initialize Chroma collections: {e}")
             raise
+
+    def _get_or_create_helper(self, name: str):
+        try:
+            return self.client.get_or_create_collection(
+                name=name,
+                metadata={"hnsw:space": "cosine"},
+                embedding_function=self.embedding_fn
+            )
+        except ValueError as ve:
+            logger.warning(f"Recreating {name} collection due to embedding function conflict: {ve}")
+            try:
+                self.client.delete_collection(name=name)
+            except Exception:
+                pass
+            return self.client.get_or_create_collection(
+                name=name,
+                metadata={"hnsw:space": "cosine"},
+                embedding_function=self.embedding_fn
+            )
 
     def add_message(self, session_id: str, role: str, content: str, message_id: Optional[str] = None):
         """Add a chat message to the vector store."""

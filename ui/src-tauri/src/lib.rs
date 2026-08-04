@@ -79,11 +79,9 @@ async fn send_json_rpc(
 #[tauri::command]
 async fn start_backend(app_handle: tauri::AppHandle) -> Result<String, String> {
     let state = app_handle.state::<BackendState>();
-    {
-        let guard = state.process.lock().await;
-        if guard.is_some() {
-            return Err("Backend is already running".to_string());
-        }
+    let mut process_guard = state.process.lock().await;
+    if process_guard.is_some() {
+        return Ok("Backend is already running".to_string());
     }
     
     // Robustly find the project root by checking current dir and ancestors
@@ -154,10 +152,7 @@ async fn start_backend(app_handle: tauri::AppHandle) -> Result<String, String> {
     // Store handles in async mutexes
     *state.stdin.lock().await = Some(stdin);
     *state.stdout.lock().await = Some(stdout_reader);
-    {
-        let mut guard = state.process.lock().await;
-        *guard = Some(child);
-    }
+    *process_guard = Some(child);
     
     // Test connection with a health check via direct JSON-RPC call
     match send_json_rpc(&app_handle, "health", json!({}), None).await {
@@ -385,6 +380,32 @@ async fn delete_memory(
     result.get("success")
         .and_then(|v| v.as_bool())
         .ok_or_else(|| "No success flag in result".to_string())
+}
+
+#[tauri::command]
+async fn get_amd_cloud_config(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let result = send_json_rpc(&app_handle, "get_amd_cloud_config", json!({}), None).await?;
+    Ok(result)
+}
+
+#[tauri::command]
+async fn update_amd_cloud_config(
+    app_handle: tauri::AppHandle,
+    endpointUrl: String,
+    apiKey: String,
+) -> Result<serde_json::Value, String> {
+    let params = json!({
+        "endpoint_url": endpointUrl,
+        "api_key": apiKey
+    });
+    let result = send_json_rpc(&app_handle, "update_amd_cloud_config", params, None).await?;
+    Ok(result)
+}
+
+#[tauri::command]
+async fn get_amd_gpu_metrics(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let result = send_json_rpc(&app_handle, "get_amd_gpu_metrics", json!({}), None).await?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -693,6 +714,9 @@ pub fn run() {
             new_session,
             backend_status,
             get_backend_health,
+            get_amd_cloud_config,
+            update_amd_cloud_config,
+            get_amd_gpu_metrics,
             get_all_sessions,
             delete_session,
             get_all_memories,

@@ -184,6 +184,14 @@ class ProviderRouter:
     ) -> Dict[str, Any]:
         """Route request directly to local AMD Radeon Cloud inference server or simulate locally."""
         target_model = model_id or "amd-cloud/llama-3-8b-instruct"
+
+        # Strip provider prefix if present (e.g. "mistral:qwen2.5-coder:1.5b" -> "qwen2.5-coder:1.5b")
+        if ":" in target_model:
+            parts = target_model.split(":", 1)
+            providers = {"amd-cloud", "google", "openai", "anthropic", "groq", "mistral", "mistralai", "codestral"}
+            if parts[0].lower() in providers:
+                target_model = parts[1]
+
         endpoint_url = config.settings.amd_cloud_url
         api_key = config.settings.amd_cloud_key
 
@@ -204,7 +212,7 @@ class ProviderRouter:
                 })
 
         # Try sending request to local/remote AMD GPU Cloud container if configured
-        if endpoint_url and "127.0.0.1" not in endpoint_url and "localhost" not in endpoint_url:
+        if endpoint_url:
             try:
                 loop = asyncio.get_event_loop()
                 payload = {
@@ -223,7 +231,7 @@ class ProviderRouter:
                 if api_key:
                     req.add_header("Authorization", f"Bearer {api_key}")
                 
-                res = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=12.0))
+                res = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=60.0))
                 res_data = json.loads(res.read().decode("utf-8"))
                 
                 # Format standard OpenAI completion response
@@ -242,6 +250,8 @@ class ProviderRouter:
                         "tokens_used": tokens_used
                     }
             except Exception as e:
+                import sys
+                print(f"ERROR: Failed to communicate with local/remote AMD Cloud: {e}", file=sys.stderr)
                 logger.debug(f"Failed to communicate with AMD Radeon Cloud container: {e}")
                 pass
 
@@ -348,10 +358,14 @@ class ProviderRouter:
 
         return ChatResponseMock(res.get("content", ""), res.get("tokens_used", 0))
 
-    async def summarize_content(self, content_str: str, model_id: Optional[str] = None) -> str:
+    async def summarize_content(self, content: str, model_id: Optional[str] = None, max_tokens: Optional[int] = None, **kwargs) -> str:
         """Mimics OpenRouterClient summarize_content method."""
-        prompt = f"Summarize the following conversation content in under 400 tokens:\n\n{content_str}"
-        res = await self.generate([{"role": "user", "content": prompt}], model_id or "amd-cloud/qwen-2.5-7b-instruct")
+        prompt = f"Summarize the following conversation content in under 400 tokens:\n\n{content}"
+        res = await self.generate(
+            [{"role": "user", "content": prompt}],
+            model_id or "amd-cloud/qwen-2.5-7b-instruct",
+            max_tokens=max_tokens or 2000
+        )
         return res.get("content", "")
 
     async def extract_memory_facts(self, user_message: str, model_id: Optional[str] = None) -> List[str]:
