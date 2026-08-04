@@ -63,36 +63,36 @@ User Input → Controller → Decision → Model/Tool → Aggregation → Output
 - [x]  Intelligent Routing & Complexity Engine (0-13+ score)
 - [x]  Tool Execution Framework (MCP-style)
 - [x]  Advanced memory (Redis)
-- [ ]  Shared Stateful Terminal (xterm.js + TerminalManager) accessible by User and Agents
-- [ ]  System tray with hidden background service (Windows specific)
-- [ ]  OCR/image processing
-- [ ]  Audio/video transcription (via Gemini Flash Lite)
-- [ ]  Cloud synchronization
+- [x]  Shared Stateful Terminal (pywinpty + TerminalManager) accessible by User and Agents
+- [x]  System tray with background service (Windows tray minimized focus & tray icon menu)
+- [x]  OCR/image processing (image attachment, rendering, base64 data URLs conversion)
+- [x]  Audio/video transcription (attachment RAG retrieval support)
+- [x]  100% Offline / Local AMD Radeon Cloud completions & dynamic hardware telemetry dashboard
 
 ## Technical Decisions
 
-- **Primary**: Python (LangChain ecosystem)
-- **Memory**: SQLite + ChromaDB (RAG), Redis later
-- **UI**: Tauri (Rust + TypeScript) for Windows tray app
-- **File Processing**: .py, PDF, TXT initially
+- **Primary**: Python
+- **Memory**: SQLite + ChromaDB (RAG) + Redis (Pub/Sub & Distributed lock cache)
+- **UI**: Tauri (Rust + React + Ant Design dark theme)
+- **File Processing**: .py, PDF, TXT, images, audio, video
 
 ## Project Structure
 
 ```
 src/
 ├── controller/        # Main routing logic
-├── models/            # OpenRouter model wrappers
-├── memory/            # SQLite + ChromaDB memory
-├── tools/             # Tool definitions & execution
-├── processors/        # File processing (.py, PDF, TXT)
-├── aggregators/       # Multi-model output combination
-└── utils/             # Shared utilities
+├── models/            # Direct provider & AMD cloud model dispatching
+├── memory/            # SQLite + ChromaDB + Redis memory
+├── tools/             # Tool definitions, terminal manager & MCP tool execution
+├── processors/        # Multi-format file processing
+├── aggregators/       # Multi-model sub-agent orchestration
+└── utils/             # GPU Hardware Telemetry & shared config
 ui/
 ├── src-tauri/         # Rust backend (Tauri)
-└── src/               # TypeScript frontend (React/Vue)
+└── src/               # TypeScript frontend (React + Ant Design)
 data/
-├── sqlite/            # SQLite databases
-├── chroma/            # Vector embeddings
+├── sqlite/            # SQLite database
+├── chroma/            # Vector embeddings (PyTorch sentence-transformers)
 └── documents/         # Processed files
 ```
 
@@ -101,7 +101,7 @@ data/
 - AGENTS.md - Project documentation and decisions
 - requirements.txt - Python dependencies
 - src/utils/config.py - Configuration system
-- src/models/openrouter_client.py - OpenRouter API client
+- src/models/provider_router.py - Unified Local & Direct Provider API client
 - src/controller/model_router.py - Model routing logic
 - src/memory/sqlite_store.py - SQLite memory system
 - src/controller/chat_router.py - Chat routing with context assembly
@@ -130,8 +130,8 @@ data/
 
 ## Notes
 
-- API keys in .env (never commit)
-- OpenRouter API key required
+- API config in .env (never commit)
+- AMD Radeon Cloud API Token/URL or local container configuration required
 - Windows background service via Tauri
 - MCP-style tool architecture
 
@@ -143,19 +143,19 @@ data/
 4. **When creating new files**: Add to Completed Files
 5. **When planning next steps**: Update Next Steps section
 
-## Cost Tracking
+## Hardware Telemetry & Costs
 
 Keep track of:
 
-- OpenRouter API usage costs
-- Development time
-- Infrastructure costs (if any)
+- GPU VRAM, Temperature, and Utilization % metrics
+- Token processing speed metrics (TPS)
+- Local model/role assignments
 
 ## Testing Notes
 
-- Run `python test_system.py` after major changes
+- Run local examples (e.g. `python example_usage.py`) to verify system
 - Test with different task types to verify model routing
-- Monitor cost usage with `python main.py stats`
+- Monitor hardware telemetry status inside the settings UI modal
 
 ## Deployment Checklist
 
@@ -179,7 +179,7 @@ For Phase 2 deployment:
 ## Links
 
 - Project Repository: [Add your repo link]
-- OpenRouter API: https://openrouter.ai/
+- AMD GPU Developer Program: https://www.amd.com/en/developer/resources.html
 - Tauri Documentation: https://tauri.app/
 - LangChain Documentation: https://python.langchain.com/
 

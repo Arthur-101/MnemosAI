@@ -55,6 +55,15 @@ class Settings(BaseSettings):
     summary_max_tokens: int = 400
     tag_extraction_model: Optional[str] = None
 
+    # ── Compatibility / Legacy Fields (Ensures CLI & router compatibility) ──
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_api_key: str = ""
+    model_qwen: str = "amd-cloud/qwen-2.5-7b-instruct"
+    model_gemini_flash: str = "amd-cloud/qwen-2.5-7b-instruct"
+    model_mimo: str = "amd-cloud/llama-3-8b-instruct"
+    model_deepseek: str = "amd-cloud/qwen-2.5-7b-instruct"
+    model_deepseek_flash: str = "amd-cloud/qwen-2.5-7b-instruct"
+
     # -----------------------------------------------------------------
     # Pydantic v2 configuration – replaces the old `class Config`
     # -----------------------------------------------------------------
@@ -157,11 +166,18 @@ class ConfigManager:
     
     def get_cost_summary(self) -> Dict[str, Any]:
         """Get current cost summary."""
+        total_input = 0
+        total_output = 0
+        for usage in self._cost_tracker["model_usage"].values():
+            total_input += usage.get("input_tokens", 0)
+            total_output += usage.get("output_tokens", 0)
         return {
             "total_cost": self._cost_tracker["total_cost"],
             "model_usage": self._cost_tracker["model_usage"],
             "cost_limit": self.settings.cost_limit,
             "cost_warning_threshold": self.settings.cost_warning_threshold,
+            "total_input_tokens": total_input,
+            "total_output_tokens": total_output,
         }
     
     def is_file_type_allowed(self, file_path: str) -> bool:

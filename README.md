@@ -1,198 +1,71 @@
-# AgenticAI
+# MnemosAI — Local Private AI Agent Platform (AMD ROCm™ Ecosystem)
 
-Multi-model AI agent system using OpenRouter APIs with MCP-style architecture. Routes tasks to specialized models instead of relying on a single model.
+MnemosAI is a 100% offline, private personal AI agent platform built to run locally on AMD Radeon™ GPUs and Instinct™ accelerators or deploy via AMD Radeon Cloud instances. 
 
-## Features
+Leveraging the **AMD ROCm™ software stack**, MnemosAI implements a multi-model hybrid routing architecture, local Pytorch-accelerated vector storage, stateful system command terminals, and an interactive real-time hardware telemetry dashboard.
 
-- **Multi-model routing**: Intelligently routes tasks to specialized models
-- **Cost optimization**: Uses cheaper models for simple tasks, expensive ones for complex tasks
-- **Memory system**: SQLite stores raw conversation turns; compressed summaries (≤ 400 tokens) are stored separately; ChromaDB for RAG.
-- **Summarization**: Uses free `gpt-oss-120b` to compact user and model responses.
-- **Smart tags**: Automatic tag extraction enables context retrieval based on related topics.
-- **Tool execution**: Managed tool execution with permission prompts
-- **Cost tracking**: Monitors usage and provides warnings
-- **Windows background service**: Runs as system tray app via Tauri (Phase 2)
-- **File processing**: Supports .py, PDF, TXT files
-- **UI Chat Interface**: Modern React + Ant Design interface with glass theme, chat history, summarization, and smart tags
+---
 
-## Model Architecture
+## 🚀 Key Features
 
-1. **Main Controller** (cheap, always running): qwen3.6-plus
-2. **Cheap Fast Model** (small tasks): gemini-2.5-flash-lite
-3. **Planner/Reasoning Layer** (complex tasks): deepseek-v4-pro / mimo-v2.5-pro
-4. **Coding/Execution Model**: deepseek-v4-flash
-5. **Multimodal Layer** (rare use): gemini-2.5-flash-lite
-- **Default chat model** configurable via env `AGENTICAI_DEFAULT_CHAT_MODEL` (defaults to `gemini-2.5-flash-lite`)
-- **System prompt** configurable via env `AGENTICAI_SYSTEM_PROMPT`
+* **100% Offline & Private cloud**: Zero dependence on commercial cloud model provider APIs. Completions are dispatched directly to local or AMD Radeon Cloud container endpoints.
+* **ROCm GPU Acceleration**: Powered by PyTorch local execution and `sentence-transformers` for ChromaDB vector embeddings. Automatically detects CUDA/HIP GPU hardware or falls back to CPU.
+* **GPU Hardware Telemetry Dashboard**: A real-time Settings dashboard built with Ant Design tracking GPU load utilization, VRAM usage progress bars, core temperature, and token generation speed (TPS) by querying `nvidia-smi` / `rocm-smi` drivers.
+* **Stateful Shared Terminal Manager**: Houses a native Windows stateful command execution environment using `pywinpty` PTY kernels. Incorporates PSReadLine cursor position code filtering and group-filtering line sanitization to prevent typing echoes.
+* **Advanced Memory Caching System**: Backed by a SQLite storage layer for raw conversation histories and summaries, ChromaDB for vector retrieval (RAG), and a bundled portable Redis server instance acting as a distributed lock, context cache, and multi-process Pub/Sub broadcaster.
+* **Smart Memory Curators**: Automatically analyzes conversation turns and consolidates enduring personal facts/preferences into database indexes while skipping transient terminal execution logs.
+* **Ant Design Glassmorphism Dark Theme**: Modern desktop UI wrapped in a Tauri Rust shell, utilizing Ant Design's `darkAlgorithm` globally across all input modules and modals.
 
-## Installation
+---
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd AgenticAI
+## 🛠️ Model Routing Architecture
+
+MnemosAI maps task roles to local model configurations dynamically. Users can assign separate models to distinct executor roles in the Settings UI (saving role mappings to SQLite & hot-reloading into Redis):
+1. **Orchestrator Role**: Manages initial task parsing and dialog loops.
+2. **Coding & Execution Role**: Specialized coding models for terminal scripts.
+3. **Reasoning & Planning Role**: Deep reasoning models for architectural tasks.
+4. **Multimodal Role**: OCR and vision analysis.
+5. **Consensus Synthesizer Role**: Merges sub-agent outputs.
+6. **Background Summarizer & Memory Role**: Compacts chat turns (≤ 400 tokens) to optimize context length.
+
+---
+
+## 📦 Getting Started
+
+### 1. Installation
+Refer to [INSTALL.md](INSTALL.md) for full configuration, virtual environment creation, and PyTorch ROCm/CUDA compiler WHL download links.
+
+### 2. Configure Environment
+1. Copy `.env.example` to `.env`
+2. Add your local vLLM/Ollama container endpoint URL and API token:
+```env
+AMD_CLOUD_URL=http://127.0.0.1:8000/v1
+AMD_CLOUD_KEY=your_token_here
 ```
 
-2. Install Python dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-3. Install UI dependencies (requires Node.js):
+### 3. Launching UI App (Tauri)
+Compile and launch the React desktop application:
 ```bash
 cd ui
 npm install
-```
-
-4. Create `.env` file from `.env.example`:
-```bash
-cp .env.example .env
-```
-
-5. Edit `.env` and add your OpenRouter API key:
-```env
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-```
-
-## Usage
-
-### CLI Interface
-
-Start interactive chat:
-```bash
-python main.py chat
-```
-
-Send a single message:
-```bash
-python main.py chat -m "Hello, how are you?"
-```
-
-Force specific model:
-```bash
-python main.py chat -m "Write Python code to sort a list" -M deepseek
-```
-
-List available models:
-```bash
-python main.py models
-```
-
-Show conversation history:
-```bash
-python main.py history
-```
-
-Show system statistics:
-```bash
-python main.py stats
-```
-
-### UI Interface (Tauri)
-
-Start the desktop application:
-```bash
-cd ui
 npm run tauri dev
 ```
 
-This will launch the AgenticAI chat interface with:
-- Modern glass-themed UI using Ant Design
-- Chat history with summarization
-- Smart tag-based context retrieval
-- Start/stop backend controls
-- Session management
+---
 
-### Interactive Mode Commands
-
-When in interactive chat mode:
-- Type `exit`, `quit`, or `bye` to exit
-- Type `clear` or `reset` to start new session
-- Type `stats` to show session statistics
-
-## Project Structure
+## 📂 Project Directory Structure
 
 ```
 src/
-├── controller/        # Model routing logic
-├── models/           # OpenRouter client wrappers
-├── memory/           # SQLite + ChromaDB memory
-├── tools/            # Tool definitions & execution
-├── processors/       # File processing
-├── aggregators/      # Multi-model output combination
-└── utils/           # Shared utilities
+├── controller/        # Task routing logic & context builders
+├── models/            # Direct provider & local AMD cloud REST client
+├── memory/            # SQLite store, ChromaDB collections, and Redis manager
+├── tools/             # basic tools, stateful PTY manager & MCP server hosts
+├── processors/        # File chunking & image/audio/video attachment parser
+├── aggregators/       # Parallel sub-agent managers & consensus synthesizers
+└── utils/             # Hardware telemetry parsers & configuration utilities
 
-ui/                   # Tauri UI (Phase 2)
-data/                 # Database and document storage
-```
-
-## Phased Development
-
-### Phase 1 (Current): Core CLI
-- [x] Model routing system
-- [x] OpenRouter client
-- [x] SQLite memory store
-- [x] Basic CLI interface
-- [x] Cost tracking
-- [x] Basic tool execution
-
-### Phase 2: Background Service + UI
-- [x] Tauri system tray app (deferred - will implement in Phase 3)
-- [x] Windows background service via Tauri
-- [x] Hotkey support (basic window focus)
-- [x] UI Chat page (start/stop agent, history view, summarization, smart tags)
-- [x] File processing (.py, PDF, TXT) (small files direct, large via RAG)
-- [x] ChromaDB integration (Vector DB for RAG memory)
-
-### Phase 3: Advanced Features
-- [x] Intelligent Routing & Complexity Engine (0-13+ score)
-- [x] Tool execution framework (MCP-style)
-- [x] Advanced memory (Redis)
-- [ ] Shared Stateful Terminal (xterm.js + TerminalManager) accessible by User and Agents
-- [ ] System tray with hidden background service (Windows specific)
-- [ ] OCR/image processing
-- [ ] Audio/video transcription (via Gemini Flash Lite)
-- [ ] Cloud synchronization
-
-## Configuration
-
-Edit `.env` file to configure:
-
-- **Default chat model** (`AGENTICAI_DEFAULT_CHAT_MODEL`): choose the model used for UI chat (defaults to `gemini-2.5-flash-lite`).
-- **System prompt** (`AGENTICAI_SYSTEM_PROMPT`): global persona prompt applied to every response.
-- **Summary max tokens** (`AGENTICAI_SUMMARY_MAX_TOKENS`): limit for compressed summaries (default 400).
-- **Tag extraction model** (`AGENTICAI_TAG_EXTRACTION_MODEL`): optional model for automatic tag generation.
-- **Cost limits**: Set budget warnings and limits.
-- **Security**: Configure file access permissions.
-- **Performance**: Adjust token limits and timeouts.
-
-## Cost Management
-
-The system tracks token usage and costs per model. Warnings are shown when:
-- Approaching configured budget threshold
-- Exceeding monthly cost limit
-- Using expensive models for simple tasks
-
-## Security
-
-- File system access requires permission prompts
-- Tool execution is sandboxed
-- API keys stored in `.env` (never committed)
-- Configurable file type restrictions
-
-## Development
-
-Run tests:
-```bash
-pytest tests/
-```
-
-Lint code:
-```bash
-ruff check src/
-```
-
-Type checking:
-```bash
-mypy src/
+ui/                    # Tauri Rust desktop window & React frontend
+data/                  # SQLite databases, Chroma indices, and files storage
+bin/                   # Portable Redis Windows binaries
 ```

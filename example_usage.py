@@ -8,7 +8,7 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from src.models.openrouter_client import OpenRouterClient, ModelType, create_messages
+from src.models.provider_router import OpenRouterClient, ModelType, create_messages
 from src.controller.model_router import ModelRouter, route_and_execute
 from src.memory.sqlite_store import SQLiteMemoryStore, SessionManager
 from src.tools.basic_tools import ToolManager

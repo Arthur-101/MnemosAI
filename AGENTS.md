@@ -7,25 +7,24 @@
 - Always update the notion page for the planning and executed tasks too.
 - And also update the Notion page if required.
 
-# AI Agent System - OpenRouter + MCP Architecture
+# AI Agent System — Local AMD Radeon Cloud & ROCm Architecture
 
 ## Project Overview
-Multi-model AI agent system using OpenRouter APIs with MCP-style architecture. Routes tasks to specialized models instead of single model.
+Multi-model private AI agent system designed for AMD Radeon™ GPUs and Instinct™ accelerators or AMD Radeon Cloud container endpoints with MCP-style tool architecture. Routes tasks to specialized local models instead of relying on a single model.
 
 ## Goal
-Create a multi-model AI agent system using OpenRouter APIs with MCP-style architecture that routes tasks to specialized models instead of relying on a single model. The system should support text queries, file inputs, multimodal reasoning, memory (RAG), and tool execution. The AI should run continuously in Windows background with system tray UI and shared memory across all models.
+Create a multi-model private AI agent system using local and AMD Radeon Cloud endpoints with AMD GPU telemetry and offline RAG. The system should support text queries, file inputs, multimodal reasoning, local memory (RAG), stateful terminals, and tool execution. The AI should run continuously in the Windows background with a system tray UI and shared memory across all models.
 
 ## Instructions
-- Use phased approach: Phase 1 (CLI), Phase 2 (Background service + UI), Phase 3 (Advanced features)
-- Language: Python (user preference), no Python avoidance
-- Memory: Start with SQLite + ChromaDB, add Redis later
-- File processing: Start with .py, PDF, TXT files, add images with OCR later
+- Use phased approach: Phase 1 (CLI), Phase 2 (Background service + UI), Phase 3 (Advanced features + Offline AMD Integration)
+- Language: Python, no Python avoidance
+- Memory: SQLite + ChromaDB (local PyTorch sentence-transformers embeddings) + Redis
+- File processing: Supports .py, PDF, TXT, images, audio, video files
 - Security: Managed access with permission prompts for read/write operations
-- Cost management: Track usage and show warnings
-- Model routing: Hybrid approach (rules + ML optimization)
-- Primary use case: Personal assistant
-- Priority: Low memory usage for now, advanced features for later
-- User comfortable with Python, no Windows development experience
+- Hardware Management: Track GPU utilization, VRAM, and temperature metrics
+- Model routing: Hybrid approach (rules + ML optimization) using customizable local roles
+- Primary use case: Private personal assistant
+- Priority: Low memory usage, local execution, and private data security
 
 ### Relevant files / directories
 #### Created files:

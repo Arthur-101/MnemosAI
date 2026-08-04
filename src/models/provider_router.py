@@ -22,6 +22,30 @@ class ModelType(Enum):
     GEMINI_PRO = "gemini_pro"
     CLAUDE = "claude"
 
+class MockMessage:
+    def __init__(self, content: str):
+        self.content = content
+    def __getitem__(self, key):
+        if key == "content":
+            return self.content
+        raise KeyError(key)
+
+class MockChoice:
+    def __init__(self, content: str):
+        self.message = MockMessage(content)
+    def __getitem__(self, key):
+        if key == "message":
+            return self.message
+        raise KeyError(key)
+
+class MockResponse:
+    def __init__(self, content: str):
+        self.choices = [MockChoice(content)]
+
+class ModelCapabilities:
+    def __init__(self, cost_per_token: float = 0.0):
+        self.cost_per_token = cost_per_token
+
 class OpenRouterClient:
     """Compatibility wrapper that acts like the deleted OpenRouterClient using local ProviderRouter under the hood."""
     def __init__(self):
@@ -50,7 +74,10 @@ class OpenRouterClient:
             temperature=kwargs.get("temperature", 0.7),
             max_tokens=kwargs.get("max_tokens", 2000)
         )
-        return res.get("content", "")
+        return MockResponse(res.get("content", ""))
+
+    async def chat_completion(self, messages, model_type, **kwargs):
+        return await self.generate_completion(messages, model_type, **kwargs)
 
     def get_available_models(self) -> List[Dict[str, Any]]:
         return [
@@ -72,12 +99,29 @@ class OpenRouterClient:
             }
         ]
 
+    def get_model_capabilities(self, model_type) -> ModelCapabilities:
+        return ModelCapabilities(cost_per_token=0.0)
+
+    def estimate_tokens(self, text: str) -> int:
+        return len(text) // 4 + 1
+
     async def close(self):
         pass
 
-def create_messages(turns: List[Any]) -> List[Any]:
-    """Helper to convert turns or list of dicts to Message objects."""
+def create_messages(*args) -> List[Any]:
+    """Helper to convert turns, or system_prompt + user_input to Message objects."""
     msgs = []
+    if len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], str):
+        msgs.append(Message(role="system", content=args[0]))
+        msgs.append(Message(role="user", content=args[1]))
+        return msgs
+        
+    if not args:
+        return msgs
+    turns = args[0]
+    if not isinstance(turns, list):
+        turns = [turns]
+        
     for t in turns:
         if isinstance(t, dict):
             msgs.append(Message(role=t.get("role", "user"), content=t.get("content", "")))
